@@ -11,7 +11,7 @@ Example page [mbektic.com/SESH](https://mbektic.com/SESH/)
 ## Running
 - Double click `GenerateHTMLSummary.py` or run the script via terminal using `python.exe .\GenerateHTMLSummary.py`  
   - A gui like the one below will pop up. 
-  - ![Image](https://github.com/user-attachments/assets/0a23c2f8-5a51-46e6-a2c9-770fc4f90093)
+  - ![Image](https://github.com/user-attachments/assets/6f19e6db-54f3-40c5-a444-b5f4f0c2bbfe)
   - Click browse and select the folder that contains your extracted JSON files.
   - After altering the settings to your liking, click "Generate Summary"
   - It will take a few seconds to generate the report, you can see the progress with the progress bar.

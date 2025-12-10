@@ -196,13 +196,13 @@ def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
         str: HTML for the "All" section as a string
     """
     sections = '<div class="year-section" id="year-all" style="display: block;">'
-    sections += build_table("🎤 Artists",
+    sections += build_table("Artists",
                             all_data["artist_time"], all_data["artist_counts"],
                             "artist-table-all")
-    sections += build_table("🎶 Tracks",
+    sections += build_table("Tracks",
                             all_data["track_time"], all_data["track_counts"],
                             "track-table-all")
-    sections += build_table("💿 Albums",
+    sections += build_table("Albums",
                             all_data["album_time"], all_data["album_counts"],
                             "album-table-all")
     sections += "</div>"
