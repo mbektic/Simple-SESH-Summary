@@ -53,7 +53,7 @@ tr td:first-of-type {
 
 tr th:nth-of-type(2),
 tr td:nth-of-type(2) {
-    width: 60%;
+    width: 57%;
 }
 
 tr td:nth-of-type(3) {
@@ -109,6 +109,49 @@ a, a:visited {
 .pagination .ellipsis {
     padding: 6px 8px;
     color: #aaa;
+}
+
+/* Listening by Year chart — horizontal layout */
+.yb-chart {
+    display: block;
+    margin: 0 auto;              /* center it */
+    max-width: 900px;
+    padding: 8px 0;              /* simple internal spacing */
+}
+
+.yb-series {
+    display: flex;
+    flex-direction: column;      /* stack rows vertically */
+    gap: 10px;
+    width: 100%;
+}
+
+.yb-hrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.yb-hlabel {
+    text-align: right;
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+/* The actual bar. Keep .yb-bar class so JS tooltips keep working. */
+.yb-hbar.yb-bar {
+    flex: 0 0 auto; /* width comes from inline percentage; do not grow equally */
+    height: 1.2em;
+    background: #1DB954;
+    border-radius: 6px;
+    max-width: 100%;
+    min-width: 0;
+}
+
+@media (max-width: 700px) {
+    .yb-series { gap: 12px; }
+    .yb-hrow { gap: 12px; }
+    .yb-hbar.yb-bar { height: 1.5em; }
 }
 
 #version-link {
@@ -564,7 +607,8 @@ a, a:visited {
     margin: 2em;
 }
 
-#personality-type {
+#personality-type,
+#listening-by-year {
     max-width: 75%;
     margin: 16px auto;
     text-align: center;
@@ -629,7 +673,7 @@ a, a:visited {
 *****************************/
 @media only screen and (max-width: 1024px) {
     h1, h2 {
-        font-size: 45pt;
+        font-size: 3em;
     }
 
     .search-input {
@@ -758,22 +802,52 @@ a, a:visited {
 
     #heatmap-holder,
     #otd-holder,
-    #personality-type {
+    #personality-type,
+    #listening-by-year {
         max-width: 93%;
     }
 
     #stats h3,
     #heatmap-holder h3,
-    #otd-holder h3 {
+    #otd-holder h3,
+    #listening-by-year h3{
         font-size: 3em;
     }
 
     #every-year-modal li,
     #stats li,
+    #stats p,
+    .yb-hlabel,
     #heatmap-holder span,
     #otd-holder span {
         font-size: 2em;
+        line-height: 1.35;
     }
+
+    /* Improve vertical rhythm for lists and paragraphs on mobile */
+    #stats li { margin-bottom: 0.85em; }
+    #stats p { margin: 0.85em 0; }
+
+    /* Make inline metric chips wrap nicely and be more tappable */
+    #heatmap-holder span,
+    #otd-holder span {
+        display: inline-block;
+        margin: 0.25em 0.4em;
+        padding: 0.15em 0.35em;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    /* Tables & inputs: full width on mobile */
+    table { width: 100%; margin: 12px auto; }
+    .search-input { width: 94%; font-size: 1.25rem; }
+
+    /* Pagination buttons easier to tap */
+    .pagination { gap: 10px; }
+    .pagination button { padding: 10px 14px; font-size: 1rem; }
+
+    /* Tighten the yearly chart spacing on mobile tablets */
+    .yb-chart, .yb-series { gap: 8px; }
 
     #stats button,
     #otd-date {
@@ -782,7 +856,8 @@ a, a:visited {
 
     #otd-pagination button,
     #otd-pagination span,
-    #personality-type p {
+    #personality-type p,
+    #listening-by-year li {
         font-size: 2em;
     }
 
@@ -802,4 +877,24 @@ a, a:visited {
     .personality-bar-wrapper {
         height: 40px;
     }
+}
+
+/* Extra small phones */
+@media only screen and (max-width: 480px) {
+    /* Slightly reduce giant text to prevent overflow while preserving hierarchy */
+    #every-year-modal li,
+    #stats li,
+    #stats p,
+    .yb-hlabel,
+    #heatmap-holder span,
+    #otd-holder span {
+        font-size: 1.6em;
+        line-height: 1.4;
+    }
+
+    .search-input { width: 96%; font-size: 1.1rem; }
+    .pagination button { padding: 12px 16px; font-size: 1.05rem; }
+
+    /* Yearly chart (horizontal): slightly larger bars on very small phones */
+    .yb-hbar.yb-bar { height: 1.65em; }
 }

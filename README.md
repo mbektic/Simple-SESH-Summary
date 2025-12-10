@@ -9,22 +9,38 @@ Example page [mbektic.com/SESH](https://mbektic.com/SESH/)
 
 
 ## Running
- - Double click `GenerateHTMLSummary.py` or run the script via terminal using `python.exe .\GenerateHTMLSummary.py`  
-   - A gui like the one below will pop up. 
-   - ![Image](https://github.com/user-attachments/assets/0a23c2f8-5a51-46e6-a2c9-770fc4f90093)
-   - Click browse and select the folder that contains your extracted JSON files.
-   - After altering the settings to your liking, click "Generate Summary"
-   - It will take a few seconds to generate the report, you can see the progress with the progress bar.
-   - ![Image](https://github.com/user-attachments/assets/2b06553c-8a3a-4cec-8f26-cab54e7c10ba)
-   - You should get a confirmation screen like so, clicking "Open Report" _should_ open it in your web browser.
-   - ![Image](https://github.com/user-attachments/assets/9804fe5d-7e23-4a8d-a02e-528ede041b65)
-   - The file will have generated in the same folder as the script if you wish to revisit it later.
-   - After opening the page, you can switch between playtime and play count as well as theme by clicking the settings button at the top right of the page.
-     - ![Image](https://github.com/user-attachments/assets/569ae55d-8d09-4141-bbbb-4539b9c6b3dc)
- - If you wish to change the default settings, they are found in the `config.py` file.
-   - You can also run the script like so `python.exe .\GenerateHTMLSummary.py --skip-gui`
-   - It will skip the GUI and just generate the report with the values in `config.py`
-     - You will need to set the default directory in the `config.py`.
+- Double click `GenerateHTMLSummary.py` or run the script via terminal using `python.exe .\GenerateHTMLSummary.py`  
+  - A gui like the one below will pop up. 
+  - ![Image](https://github.com/user-attachments/assets/0a23c2f8-5a51-46e6-a2c9-770fc4f90093)
+  - Click browse and select the folder that contains your extracted JSON files.
+  - After altering the settings to your liking, click "Generate Summary"
+  - It will take a few seconds to generate the report, you can see the progress with the progress bar.
+  - ![Image](https://github.com/user-attachments/assets/2b06553c-8a3a-4cec-8f26-cab54e7c10ba)
+  - You should get a confirmation screen like so, clicking "Open Report" _should_ open it in your web browser.
+  - ![Image](https://github.com/user-attachments/assets/9804fe5d-7e23-4a8d-a02e-528ede041b65)
+  - The file will have generated in the same folder as the script if you wish to revisit it later.
+  - After opening the page, you can switch between playtime and play count as well as theme by clicking the settings button at the top right of the page.
+    - ![Image](https://github.com/user-attachments/assets/569ae55d-8d09-4141-bbbb-4539b9c6b3dc)
+- If you wish to change the default settings, they are found in the `config.py` file.
+  - You can also run the script like so `python.exe .\GenerateHTMLSummary.py --skip-gui`
+  - It will skip the GUI and just generate the report with the values in `config.py`
+    - You will need to set the default directory in the `config.py`.
+
+### Minimum Year filter (optional)
+You can optionally filter out any plays before a specified year. This is useful if you only want to analyze recent listening history.
+
+- In the GUI:
+  - Check "Filter out plays before this year" in the "Minimum Year (optional)" section.
+  - Enter a year (e.g., 2020). Valid range is 1900–3000. If the field is empty or invalid, you’ll be prompted to fix it.
+
+- In `config.py` (when using `--skip-gui` or setting defaults):
+  - Set `MIN_YEAR` to an integer (e.g., `MIN_YEAR = 2020`) to enable filtering.
+  - Set `MIN_YEAR = None` to disable filtering (default).
+  - Any invalid value or out‑of‑range year will automatically disable the filter during validation.
+
+What gets filtered:
+- All processing steps ignore entries whose timestamp year is less than `MIN_YEAR`.
+- This applies to all statistics and also to the "On This Day" section.
 
 
 ## IMPORTANT NOTES
@@ -50,12 +66,20 @@ Example page [mbektic.com/SESH](https://mbektic.com/SESH/)
 ![Image](https://github.com/user-attachments/assets/a18a3ea2-279a-494e-bcf5-97989c344841)
 
 ### Stats
+#### Overview & Time/Library 
 ![Image](https://github.com/user-attachments/assets/fcac2f11-4e1b-4e4d-be34-a0673d5e634c)
+#### Milestones/Popularity
 ![Image](https://github.com/user-attachments/assets/c849a630-78e1-43d4-8fa7-7dda20969c7b)
+#### Patters/Session & Behavior
 ![Image](https://github.com/user-attachments/assets/ff73754e-2461-4261-9d91-f4af2a06c42e)
+#### On this day
 ![Image](https://github.com/user-attachments/assets/84f50afd-3810-445c-9679-7686b589aa2b)
+#### Artist played every year
 ![Image](https://github.com/user-attachments/assets/bfa47186-ae50-4c73-a2b4-77e7fdf0b0db)
-![Image](https://github.com/user-attachments/assets/29c716bd-3300-4ade-afdf-1f97cb6d92fd)
+#### Listening By Year
+![Image](https://github.com/user-attachments/assets/96da5c9c-930f-4649-b779-fcb2206db750)
+#### Heatmap
+![Image](https://github.com/user-attachments/assets/169be638-f73d-48ea-9dfb-43dd055e9b31)
 
 ## Thanks
  - [Tippy.js](https://atomiks.github.io/tippyjs/)

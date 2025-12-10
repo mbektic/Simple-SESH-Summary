@@ -538,13 +538,13 @@ def calculate_session_stats(
         avg_hours = avg_seconds // 3600
         avg_minutes = (avg_seconds % 3600) // 60
         avg_seconds = avg_seconds % 60
-        avg_str = f"{avg_hours:02}:{avg_minutes:02}:{avg_seconds:02}"
+        avg_str = f"{avg_hours:02}h {avg_minutes:02}m {avg_seconds:02}s"
 
         long_seconds = int(longest_dur.total_seconds())
         long_hours = long_seconds // 3600
         long_minutes = (long_seconds % 3600) // 60
         long_seconds = long_seconds % 60
-        long_str = f"{long_hours:02}:{long_minutes:02}:{long_seconds:02}"
+        long_str = f"{long_hours:02}h {long_minutes:02}m {long_seconds:02}s"
 
         # format date for the longest session
         if longest_start:
@@ -554,8 +554,8 @@ def calculate_session_stats(
     except Exception as e:
         logging.error(f"Error computing listening session stats: {e}")
         num_sessions = 0
-        avg_str = "00:00:00"
-        long_str = "00:00:00"
+        avg_str = "00h 00m 00s"
+        long_str = "00h 00m 00s"
         long_date_str = "N/A"
 
     result["num_sessions"] = num_sessions
@@ -630,7 +630,7 @@ def calculate_track_stats(
         total_hours = total_seconds // 3600
         total_minutes = (total_seconds % 3600) // 60
         total_seconds = total_seconds % 60
-        total_time_str = f"{total_hours:02}:{total_minutes:02}:{total_seconds:02}"
+        total_time_str = f"{total_hours:02}h {total_minutes:02}m {total_seconds:02}s"
 
         if total_plays > 0:
             avg_play_ms = total_ms / total_plays
@@ -640,17 +640,17 @@ def calculate_track_stats(
             avg_hours = avg_seconds // 3600
             avg_minutes = (avg_seconds % 3600) // 60
             avg_seconds = avg_seconds % 60
-            avg_play_str = f"{avg_hours:02}:{avg_minutes:02}:{avg_seconds:02}"
+            avg_play_str = f"{avg_hours:02}h {avg_minutes:02}m {avg_seconds:02}s"
         else:
             avg_play_ms = 0
-            avg_play_str = "00:00:00"
+            avg_play_str = "00h 00m 00s"
     except Exception as e:
         logging.error(f"Error computing total listening time: {e}")
         total_ms = 0
         total_plays = 0
-        total_time_str = "00:00:00"
+        total_time_str = "00h 00m 00s"
         avg_play_ms = 0
-        avg_play_str = "00:00:00"
+        avg_play_str = "00h 00m 00s"
 
     result["total_ms"] = total_ms
     result["total_plays"] = total_plays

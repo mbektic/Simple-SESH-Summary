@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] 2025-12-10
+### Added 
+- New "Listening by Year" mini chart in the Stats section showing your listening per year.
+- Added a new Minimum Year filter.
+
+### Changed
+- Changed the default format for timestamps from HH:MM:SS to 09h 27m 51s
+- Fixed some minor styling issues.
+
+### Fixed
+- Mobile styling for "On This Day" section
+
 ## [1.15.3] 2025-05-07
 ### Changed 
 - Switched the info buttons tooltips to show on click instead of hover. 

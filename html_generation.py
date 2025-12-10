@@ -11,20 +11,19 @@ from typing import Dict, List, Any, DefaultDict
 
 def ms_to_hms(ms: int) -> str:
     """
-    Convert milliseconds to a formatted string hours:minutes:seconds milliseconds.
+    Convert milliseconds to a formatted string with explicit units.
 
     Args:
         ms (int): Milliseconds to convert
 
     Returns:
-        str: Formatted string in the format "HH:MM:SS MSSms"
+        str: Formatted string in the format "HHh MMm SSs" (zero‑padded)
     """
-    seconds = ms // 1000
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
-    milliseconds = ms - (hours * 60 * 60 * 1000) - (minutes * 60 * 1000) - (seconds * 1000)
-    return f"{hours:02}:{minutes:02}:{seconds:02} {milliseconds:03}ms"
+    total_seconds = max(0, ms // 1000)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+    return f"{hours:02}h {minutes:02}m {seconds:02}s"
 
 
 def escape_js_string(s: str) -> str:
@@ -131,7 +130,7 @@ def build_table(title: str, playtime_counts: Dict[str, int], playcount_counts: D
         str: HTML table as a string
     """
     clean_title = title[2:]  # Remove emoji
-    mode_string_playtime = "Playtime H:M:S ms"
+    mode_string_playtime = "Playtime"
     mode_string_playcount = "Plays"
 
     # Playtime rows
@@ -238,7 +237,7 @@ def build_year_sections(years: List[int], yearly: DefaultDict[int, Dict[str, Def
     return sections
 
 
-def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], otd_data) -> str:
+def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], otd_data, yearly=None) -> str:
     """
     Build HTML for the statistics section.
 
@@ -255,6 +254,62 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], o
     })
     first_date = stats_data.get('first_str', "")
     last_date = stats_data.get('last_str', "")
+
+    # Build simple per-year listening chart (playtime vs playcount) if yearly data provided
+    year_chart_html = ""
+    try:
+        if yearly:
+            years_sorted = sorted(yearly.keys())
+            # Compute totals per year
+            pt_totals = [sum(yearly[y]["track_time"].values()) for y in years_sorted]
+            pc_totals = [sum(yearly[y]["track_counts"].values()) for y in years_sorted]
+            max_pt = max(pt_totals) if pt_totals else 1
+            max_pc = max(pc_totals) if pc_totals else 1
+
+            # Build horizontal row markup with full year label on the left and width‑scaled bars
+            def build_horizontal_rows(values: list[int], max_val: int, include_pt: bool) -> str:
+                rows = []
+                for y, v_pc, v_pt in zip(years_sorted, pc_totals, pt_totals):
+                    v = v_pt if include_pt else v_pc
+                    # Scale so the maximum year maps to 90% width instead of 100%
+                    width_pct = (v / (max_val if max_val else 1) * 90) if max_val > 0 else 0
+                    # Guard against any floating rounding pushing it slightly above 90
+                    if width_pct > 90:
+                        width_pct = 90
+                    # data attributes on the actual bar so tooltips can read current mode dynamically
+                    rows.append(
+                        """
+                        <div class="yb-hrow">
+                          <div class="yb-hlabel">{year}</div>
+                          <div class="yb-hbar yb-bar" data-year="{year}" data-pc="{pc}" data-pt-ms="{pt}" style="width:{w:.2f}%;"></div>
+                        </div>
+                        """.format(year=y, pc=v_pc, pt=v_pt, w=width_pct)
+                    )
+                return "".join(rows)
+
+            pc_rows_html = build_horizontal_rows(pc_totals, max_pc, include_pt=False)
+            pt_rows_html = build_horizontal_rows(pt_totals, max_pt, include_pt=True)
+
+            year_chart_html = (
+                """
+            <div id="listening-by-year" class="stats-group">
+              <h3>Listening by Year</h3>
+              <ul>
+                <li>Hover/Tap on a year to see the exact values</li>
+              </ul>
+              <div class="yb-chart" aria-label="Listening by Year">
+                <div id="year-chart-playcount" class="yb-series" style="display:none;">
+                """ + pc_rows_html + """
+                </div>
+                <div id="year-chart-playtime" class="yb-series" style="display:flex;">
+                """ + pt_rows_html + """
+                </div>
+              </div>
+            </div>
+            """
+            )
+    except Exception as e:
+        logging.error(f"Failed to build yearly chart: {e}")
 
     return f"""
     <h2>Stats</h2>
@@ -380,6 +435,8 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], o
         </ul>
       </div>
     </div>
+    
+      {year_chart_html}
 
       <div id="heatmap-holder" class="stats-group">
         <h3>Activity Heatmap</h3>

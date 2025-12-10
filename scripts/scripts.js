@@ -169,6 +169,69 @@ document.addEventListener("DOMContentLoaded", () => {
     // Global mode toggle
     const modeToggle = document.getElementById("global-mode-toggle");
     const modeToggleText = document.getElementById(`mode-toggle-label`);
+    // Initialize yearly chart to current mode if available
+    const initialMode = modeToggle.checked ? "playtime" : "playcount";
+    // Define and expose yearly chart mode switcher + tooltips
+    (function(){
+        function formatMs(ms){
+            const sec = Math.floor(ms/1000);
+            const h = Math.floor(sec/3600);
+            const m = Math.floor((sec%3600)/60);
+            const s = sec%60;
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+        }
+
+        function getYearBarTooltip(reference){
+            const year = reference.getAttribute('data-year');
+            const isPlaytime = document.getElementById('global-mode-toggle').checked;
+            if (isPlaytime) {
+                const ms = parseInt(reference.getAttribute('data-pt-ms')||'0',10);
+                return `${year}: ${formatMs(ms)}`;
+            } else {
+                const pc = parseInt(reference.getAttribute('data-pc')||'0',10);
+                return `${year}: ${pc} plays`;
+            }
+        }
+
+        // initialize tippy on bars with dynamic content based on current mode
+        function initYearBarTooltips(){
+            tippy('.yb-bar', {
+                onShow(instance){
+                    instance.setContent(getYearBarTooltip(instance.reference));
+                },
+                allowHTML: false,
+                placement: 'top',
+                arrow: true,
+                theme: 'spotify',
+                maxWidth: '50em'
+            });
+        }
+
+        function setYearChart(mode){
+            const pc = document.getElementById('year-chart-playcount');
+            const pt = document.getElementById('year-chart-playtime');
+            if(!pc || !pt) return;
+            if(mode === 'playcount'){ pc.style.display='flex'; pt.style.display='none'; }
+            else { pc.style.display='none'; pt.style.display='flex'; }
+            // No need to recreate tippy; content is dynamic and uses current mode
+        }
+
+        function refreshYearBarTooltips(){
+            document.querySelectorAll('.yb-bar').forEach(el => {
+                if (el._tippy) {
+                    el._tippy.setContent(getYearBarTooltip(el));
+                }
+            });
+        }
+
+        window.__setYearChartMode = setYearChart;
+        // Initialize now
+        setYearChart(initialMode);
+        initYearBarTooltips();
+        // Ensure initial tooltip content matches initial mode
+        refreshYearBarTooltips();
+    })();
     modeToggle.addEventListener("change", () => {
         const newMode = modeToggle.checked ? "playtime" : "playcount";
 
@@ -182,6 +245,27 @@ document.addEventListener("DOMContentLoaded", () => {
         modeToggleText.textContent = modeToggle.checked
             ? "Switch to Playcount:"
             : "Switch to Playtime:";
+
+        // Update yearly chart dataset if present
+        if (typeof window.__setYearChartMode === 'function') {
+            window.__setYearChartMode(newMode);
+        }
+        // Refresh tooltip content to reflect the new mode immediately
+        document.querySelectorAll('.yb-bar').forEach(el => {
+            if (el._tippy) {
+                // Update content; if a tooltip is open, this updates live
+                el._tippy.setContent((function(){
+                    const year = el.getAttribute('data-year');
+                    if (newMode === 'playtime') {
+                        const ms = parseInt(el.getAttribute('data-pt-ms')||'0',10);
+                        return `${year}: ${formatMs(ms)}`;
+                    } else {
+                        const pc = parseInt(el.getAttribute('data-pc')||'0',10);
+                        return `${year}: ${pc} plays`;
+                    }
+                })());
+            }
+        });
     });
 })
 

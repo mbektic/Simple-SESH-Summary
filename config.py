@@ -6,14 +6,19 @@ import logging
 MIN_MILLISECONDS = 20000
 
 
+# Optional minimum year filter. If set (e.g., 2020), data before that year will be ignored.
+# Set to None to disable year filtering.
+MIN_YEAR = None
+
+
 # Directory, or folder, on your computer where your Spotify JSON files are located.
 #     The easiest method is to just put them in the sesh folder.
-INPUT_DIR = ""
+INPUT_DIR = "sesh/tmp"
 
 
 # Name/path of the output file. If you don't change this, it will be in the same folder
 #     as this script with the name summary.html. No need to add the .html
-OUTPUT_FILE = "summary"
+OUTPUT_FILE = "o"
 
 
 def validate_config():
@@ -24,12 +29,23 @@ def validate_config():
     Returns:
         bool: True if validation succeeded, False if critical errors were found
     """
-    global MIN_MILLISECONDS, INPUT_DIR, OUTPUT_FILE
+    global MIN_MILLISECONDS, INPUT_DIR, OUTPUT_FILE, MIN_YEAR
 
     # Validate MIN_MILLISECONDS
     if not isinstance(MIN_MILLISECONDS, int) or MIN_MILLISECONDS < 0:
         logging.warning(f"Invalid MIN_MILLISECONDS value: {MIN_MILLISECONDS}. Setting to default (20000).")
         MIN_MILLISECONDS = 20000
+
+    # Validate MIN_YEAR (allow None to disable)
+    if MIN_YEAR is not None:
+        try:
+            MIN_YEAR = int(MIN_YEAR)
+            if MIN_YEAR < 1900 or MIN_YEAR > 3000:
+                logging.warning(f"MIN_YEAR out of range: {MIN_YEAR}. Disabling year filter.")
+                MIN_YEAR = None
+        except (TypeError, ValueError):
+            logging.warning(f"Invalid MIN_YEAR value: {MIN_YEAR}. Disabling year filter.")
+            MIN_YEAR = None
 
     # Validate INPUT_DIR
     if not INPUT_DIR or not isinstance(INPUT_DIR, str):

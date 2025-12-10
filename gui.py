@@ -42,6 +42,9 @@ class ConfigApp:
         self.min_millis_var = tk.IntVar(value=config.MIN_MILLISECONDS)
         self.input_dir_var = tk.StringVar(value=config.INPUT_DIR)
         self.output_file_var = tk.StringVar(value=config.OUTPUT_FILE)
+        # Minimum Year filter controls
+        self.use_min_year_var = tk.BooleanVar(value=(getattr(config, 'MIN_YEAR', None) is not None))
+        self.min_year_var = tk.StringVar(value=str(getattr(config, 'MIN_YEAR', '') or ''))
 
         self.build_ui()
 
@@ -71,9 +74,27 @@ class ConfigApp:
 
         ttk.Entry(self.millis_frame, textvariable=self.min_millis_var, width=10, font=("Helvetica", 14)).pack(anchor="w", padx=10, pady=5)
 
+        # Minimum Year (optional filter)
+        self.min_year_frame = ttk.LabelFrame(self.root, text="Minimum Year (optional)")
+        self.min_year_frame.grid(row=2, column=0, sticky="ew", **padding)
+
+        yr_top = ttk.Frame(self.min_year_frame)
+        yr_top.pack(anchor="w", padx=10, pady=(5, 0), fill="x")
+        ttk.Checkbutton(yr_top, text="Filter out plays before this year", variable=self.use_min_year_var,
+                        command=self._toggle_min_year_state).pack(side="left")
+
+        yr_input = ttk.Frame(self.min_year_frame)
+        yr_input.pack(anchor="w", padx=10, pady=5)
+        ttk.Label(yr_input, text="Minimum Year:").pack(side="left", padx=(0, 10))
+        self.min_year_entry = ttk.Entry(yr_input, textvariable=self.min_year_var, width=10, font=("Helvetica", 14))
+        self.min_year_entry.pack(side="left")
+
+        # Initialize enable/disable state
+        self._toggle_min_year_state()
+
         # Input Directory
         input_frame = ttk.LabelFrame(self.root, text="Input Directory")
-        input_frame.grid(row=2, column=0, sticky="ew", **padding)
+        input_frame.grid(row=3, column=0, sticky="ew", **padding)
 
         ttk.Label(
             input_frame,
@@ -92,7 +113,7 @@ class ConfigApp:
 
         # Output File
         output_frame = ttk.LabelFrame(self.root, text="Output File")
-        output_frame.grid(row=3, column=0, sticky="ew", **padding)
+        output_frame.grid(row=4, column=0, sticky="ew", **padding)
 
         ttk.Label(
             output_frame,
@@ -103,7 +124,16 @@ class ConfigApp:
         ttk.Entry(output_frame, textvariable=self.output_file_var, width=40, font=("Helvetica", 14)).pack(anchor="w", padx=10, pady=5)
 
         # Run Button
-        ttk.Button(self.root, text="Generate Summary", command=self.run).grid(row=5, column=0, pady=15)
+        ttk.Button(self.root, text="Generate Summary", command=self.run).grid(row=6, column=0, pady=15)
+
+    def _toggle_min_year_state(self):
+        enabled = self.use_min_year_var.get()
+        state = "!disabled" if enabled else "disabled"
+        try:
+            self.min_year_entry.state([state])
+        except Exception:
+            # Fallback for older Tk versions
+            self.min_year_entry.configure(state=("normal" if enabled else "disabled"))
 
     def validate_inputs(self):
         """
@@ -163,6 +193,21 @@ class ConfigApp:
             tk.messagebox.showerror("Error", f"Invalid output file path: {e}")
             return False
 
+        # Validate minimum year if enabled
+        if self.use_min_year_var.get():
+            year_str = self.min_year_var.get().strip()
+            if not year_str:
+                tk.messagebox.showerror("Invalid Input", "Please enter a minimum year or uncheck the filter option.")
+                return False
+            try:
+                year = int(year_str)
+            except ValueError:
+                tk.messagebox.showerror("Invalid Input", "Minimum year must be a valid integer, e.g., 2018.")
+                return False
+            if year < 1900 or year > 3000:
+                tk.messagebox.showerror("Invalid Input", "Minimum year must be between 1900 and 3000.")
+                return False
+
         return True
 
     def run(self):
@@ -174,6 +219,14 @@ class ConfigApp:
         config.MIN_MILLISECONDS = int(self.min_millis_var.get())
         config.INPUT_DIR = self.input_dir_var.get().strip()
         config.OUTPUT_FILE = self.output_file_var.get().strip()
+        # Set MIN_YEAR in config
+        if self.use_min_year_var.get():
+            try:
+                config.MIN_YEAR = int(self.min_year_var.get().strip())
+            except ValueError:
+                config.MIN_YEAR = None
+        else:
+            config.MIN_YEAR = None
 
         # Create a progress window
         progress_win = tk.Toplevel(self.root)

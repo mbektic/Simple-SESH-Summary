@@ -365,7 +365,7 @@ def process_entry(
         play_counted, skip_count, offline_count, track_skip_counts
     )
 
-def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int) -> tuple[
+def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, min_year: Optional[int] = None) -> tuple[
     defaultdict[Any, dict[str, defaultdict[Any, int]]] | defaultdict[int, dict[str, defaultdict[str, int]]], set[
         Any], datetime | None, dict[str, Any] | None, datetime | None, dict[str, Any] | None, set[Any] | set[str], set[
         Any] | set[str], set[Any] | set[str], defaultdict[Any, set] | defaultdict[str, set[str]], Counter[
@@ -378,6 +378,7 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int) -
     Args:
         entries (List[Dict[str, Any]]): List of Spotify streaming history entries
         min_milliseconds (int): Minimum milliseconds for a play to count
+        min_year (Optional[int]): If provided, ignore entries with year < min_year
 
     Returns:
         Tuple containing various statistics:
@@ -431,6 +432,15 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int) -
 
     # Process entries one at a time
     for entry in entries:
+        # Year filter (skip entries before min_year)
+        if min_year is not None:
+            try:
+                ts = datetime.fromisoformat(entry["ts"].replace("Z", "+00:00"))
+                if ts.year < min_year:
+                    continue
+            except Exception:
+                # If timestamp is bad, let process_entry handle validation/logging
+                pass
         (
             yearly, dates_set, first_ts, first_entry, last_ts, last_entry,
             artist_set, album_set, track_set, artist_tracks, daily_counts,
@@ -446,7 +456,10 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int) -
     date_to_tracks = defaultdict(Counter)
     for entry in entries:
         if entry.get("ms_played", 0) > min_milliseconds:
-            dt = datetime.fromisoformat(entry["ts"].replace("Z", "+00:00")).date()
+            dt_full = datetime.fromisoformat(entry["ts"].replace("Z", "+00:00"))
+            if min_year is not None and dt_full.year < min_year:
+                continue
+            dt = dt_full.date()
             mmdd = dt.strftime("%m-%d")
             full_date = dt.isoformat()
             track_name = entry.get("master_metadata_track_name", "Unknown Track")
