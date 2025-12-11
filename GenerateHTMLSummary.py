@@ -17,7 +17,7 @@ from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.17.0"
+VERSION = "1.18.0"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments
@@ -96,7 +96,7 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
                 yearly, dates_set, first_ts, first_entry, last_ts, last_entry,
                 artist_set, album_set, track_set, artist_tracks, daily_counts,
                 monthly_counts, weekday_counts, hour_counts, play_times,
-                play_counted, skip_count, offline_count, track_skip_counts, otd_data
+                play_counted, skip_count, offline_count, track_skip_counts, otd_data, daily_entity
             ) = process_spotify_data(entries, MIN_MILLISECONDS, getattr(config, 'MIN_YEAR', None))
         except Exception as e:
             logging.error(f"Error processing Spotify data: {e}")
@@ -136,7 +136,7 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
             year_sections = build_year_sections(years)
             sections = all_section + year_sections
             stats_html = build_stats_html(stats_data, daily_counts, otd_data, yearly)
-            table_data = build_tables_data(all_data, yearly)
+            table_data = build_tables_data(all_data, yearly, daily_entity)
         except Exception as e:
             logging.error(f"Error building HTML content: {e}")
             log_exception()

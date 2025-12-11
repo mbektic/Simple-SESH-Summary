@@ -247,10 +247,13 @@ def build_year_tabs(years: List[int]) -> str:
     Returns:
         str: HTML for year tabs as a string
     """
-    return '<button class="year-tab active" data-year="all" role="tab" aria-selected="true" aria-controls="year-all">All</button>' + "".join(
+    tabs = ['<button class="year-tab active" data-year="all" role="tab" aria-selected="true" aria-controls="year-all">All</button>']
+    tabs += [
         f'<button class="year-tab" data-year="{yr}" role="tab" aria-selected="false" aria-controls="year-{yr}">{yr}</button>'
         for yr in years
-    )
+    ]
+    tabs.append('<button class="year-tab" data-year="custom" role="tab" aria-selected="false" aria-controls="year-custom">Custom</button>')
+    return "".join(tabs)
 
 
 def build_year_dropdown(years: List[int]) -> str:
@@ -263,9 +266,12 @@ def build_year_dropdown(years: List[int]) -> str:
     Returns:
         str: HTML for a labeled <select> that mirrors the year tabs
     """
-    options = '<option value="all" selected>All</option>' + "".join(
+    # Add a hidden placeholder option so selecting "Custom…" can reset to it,
+    # allowing users to select Custom again to reopen the modal on mobile.
+    options = '<option value="__placeholder" hidden style="display:none">Custom…</option>' + \
+              '<option value="all" selected>All</option>' + "".join(
         f'<option value="{yr}">{yr}</option>' for yr in years
-    )
+    ) + '<option value="custom">Custom…</option>'
     return f'''<div id="year-dropdown" class="year-dropdown" aria-label="Year selection">
   <label for="year-select" class="year-select-label">Year</label>
   <select id="year-select" class="year-select">{options}</select>
@@ -297,13 +303,15 @@ def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
 
 
 def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
-                      yearly: DefaultDict[int, Dict[str, DefaultDict[str, int]]]) -> Dict[str, Any]:
+                      yearly: DefaultDict[int, Dict[str, DefaultDict[str, int]]],
+                      daily_entity: Dict[str, Dict[str, Dict[str, List[int]]]] | None = None) -> Dict[str, Any]:
     """
     Build a compact data structure for all tables to be rendered client-side.
 
-    Returns a dictionary with two keys:
+    Returns a dictionary with keys:
       - "names": a deduplicated list of all entity names (artists/tracks/albums)
       - "tables": a mapping of table_id -> list of [nameIndex, playtime_ms, playcount]
+      - "daily": optional mapping date(YYYY-MM-DD) -> { artist|track|album: Array[[nameIndex, pt, pc]] }
 
     Table IDs follow existing convention:
       - artist-table-all, track-table-all, album-table-all
@@ -343,7 +351,29 @@ def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
         tables[f"track-table-{yr}"] = build_rows(ydata["track_time"], ydata["track_counts"])
         tables[f"album-table-{yr}"] = build_rows(ydata["album_time"], ydata["album_counts"])
 
-    return {"names": names, "tables": tables}
+    result: Dict[str, Any] = {"names": names, "tables": tables}
+
+    # Optional: include compact daily dataset for client-side custom ranges
+    if daily_entity:
+        daily_out: Dict[str, Dict[str, List[List[Any]]]] = {}
+        try:
+            for date_key, groups in daily_entity.items():
+                daily_out[date_key] = {}
+                for kind in ("artist", "track", "album"):
+                    rows = []
+                    for name, (pt, pc) in groups.get(kind, {}).items():
+                        # Ensure positive integers
+                        pt_i = int(pt) if isinstance(pt, (int, float)) else 0
+                        pc_i = int(pc) if isinstance(pc, (int, float)) else 0
+                        rows.append([get_index(name), pt_i, pc_i])
+                    if rows:
+                        daily_out[date_key][kind] = rows
+        except Exception as e:
+            logging.error(f"Failed to build daily tables: {e}")
+        if daily_out:
+            result["daily"] = daily_out
+
+    return result
 
 
 def build_year_sections(years: List[int]) -> str:
@@ -359,6 +389,8 @@ def build_year_sections(years: List[int]) -> str:
     sections = ""
     for yr in years:
         sections += f'<div class="year-section" id="year-{yr}" style="display: none;"></div>'
+    # Add a hidden section for custom date ranges
+    sections += '<div class="year-section" id="year-custom" style="display: none;"></div>'
     return sections
 
 
@@ -721,12 +753,14 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
         {print_file("html/title_bar.html")}
         <div id="year-tabs">{tabs}</div>
         {year_dropdown}
+        <div id="custom-range-info" class="custom-range-info" style="display:none" aria-live="polite"></div>
         {data_script}
         {sections}
         {personality_html}
         {stats_html}
 
         {print_file("html/settings_modal.html")}
+        {print_file("html/date_range_modal.html")}
     </body>
     <footer>
       <a id="version-link" href="{github_url}">Version: {version}</a>

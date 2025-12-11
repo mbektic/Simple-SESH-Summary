@@ -54,13 +54,16 @@ If you are experiencing issues with the generated HTML file, you can try setting
 - The resulting `.html` file can be shared without any of the other scripts or style files as everything is all built into it.
 - None of your data ever leaves your system or is uploaded anywhere, this all stays on your machine.
 
-## Images
-### Year Selector
+## Features
+### Time Filter Selector
 This will filter the tables based on the year selected.
 #### Desktop
-![Image](https://github.com/user-attachments/assets/69f56d14-c3d9-4f08-a684-ad8b0e87d5b1)
+![Image](https://github.com/user-attachments/assets/61c6785a-ef91-4398-881f-796b6af98d53)
 #### Mobile
 ![Image](https://github.com/user-attachments/assets/f3b2b1fa-f7f0-4479-a888-46783e4a38c3)
+#### Selecting Custom
+By selecting custom, you can select any date range for the tables.
+![Image](https://github.com/user-attachments/assets/ea59f1b3-c270-4f83-8e59-126eee50f318)
 
 ### Artist (Dark Mode and Play Time)
 ![Image](https://github.com/user-attachments/assets/a2b84762-d564-44f0-90c4-3235670fb64a)

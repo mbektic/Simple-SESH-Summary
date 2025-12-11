@@ -360,7 +360,7 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, m
         Any], datetime | None, dict[str, Any] | None, datetime | None, dict[str, Any] | None, set[Any] | set[str], set[
         Any] | set[str], set[Any] | set[str], defaultdict[Any, set] | defaultdict[str, set[str]], Counter[
         Any] | Counter, Counter[Any] | Counter, Counter[Any] | Counter, Counter[Any] | Counter, list[Any] | list[
-        datetime], int, int, int, Counter[Any] | Counter, str]:
+        datetime], int, int, int, Counter[Any] | Counter, str, dict]:
     """
     Process Spotify streaming history entries and extract statistics.
     Uses a generator-based approach for memory efficiency.
@@ -420,6 +420,14 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, m
     offline_count = 0
     track_skip_counts = Counter()
 
+    # Daily aggregates per entity for client-side custom date range filtering
+    # Structure: { date(YYYY-MM-DD): { 'artist': {name: [pt, pc]}, 'track': {...}, 'album': {...} } }
+    daily_entity = defaultdict(lambda: {
+        'artist': defaultdict(lambda: [0, 0]),
+        'track': defaultdict(lambda: [0, 0]),
+        'album': defaultdict(lambda: [0, 0]),
+    })
+
     # Process entries one at a time
     for entry in entries:
         # Year filter (skip entries before min_year)
@@ -445,7 +453,8 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, m
 
     date_to_tracks = defaultdict(Counter)
     for entry in entries:
-        if entry.get("ms_played", 0) > min_milliseconds:
+        ms = entry.get("ms_played", 0)
+        if ms > 0:
             dt_full = datetime.fromisoformat(entry["ts"].replace("Z", "+00:00"))
             if min_year is not None and dt_full.year < min_year:
                 continue
@@ -454,8 +463,30 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, m
             full_date = dt.isoformat()
             track_name = entry.get("master_metadata_track_name", "Unknown Track")
             artist = entry.get("master_metadata_album_artist_name", "Unknown Artist")
+            album_name = entry.get("master_metadata_album_album_name", "Unknown Album")
             track = f"{track_name} — {artist}"
-            date_to_tracks[mmdd][(track, full_date)] += 1
+
+            # For On‑This‑Day widget we still require the stricter threshold for counting
+            if ms > min_milliseconds:
+                date_to_tracks[mmdd][(track, full_date)] += 1
+
+            # Populate daily entity aggregates (playtime always adds; playcount only if above threshold)
+            date_key = full_date
+            dslot = daily_entity[date_key]
+            # Artist
+            dslot['artist'][artist][0] += ms
+            if ms > min_milliseconds:
+                dslot['artist'][artist][1] += 1
+            # Track
+            track_full = f"{track_name} - {artist}"
+            dslot['track'][track_full][0] += ms
+            if ms > min_milliseconds:
+                dslot['track'][track_full][1] += 1
+            # Album
+            album_full = f"{album_name} - {artist}"
+            dslot['album'][album_full][0] += ms
+            if ms > min_milliseconds:
+                dslot['album'][album_full][1] += 1
 
     # Convert to JSON-ready format, excluding any entries with only 1 play
     otd = {}
@@ -472,7 +503,7 @@ def process_spotify_data(entries: List[Dict[str, Any]], min_milliseconds: int, m
         yearly, dates_set, first_ts, first_entry, last_ts, last_entry,
         artist_set, album_set, track_set, artist_tracks, daily_counts,
         monthly_counts, weekday_counts, hour_counts, play_times,
-        play_counted, skip_count, offline_count, track_skip_counts, otd_json
+        play_counted, skip_count, offline_count, track_skip_counts, otd_json, dict(daily_entity)
     )
 
 def process_entry_for_deduplication(entry: Dict[str, Any], unique_entries: Dict[str, Dict[str, Any]]) -> Tuple[Dict[str, Dict[str, Any]], bool]:

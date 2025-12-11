@@ -128,7 +128,7 @@ function paginateTable(tableId, pageSize) {
     const tbody = document.getElementById(`${tableId}-tbody`);
     const metricLabel = document.getElementById(`${tableId}-metric-label`);
     const searchInput = document.getElementById(`${tableId}-search`);
-    const prefix = tableId.replace(/-(?:\d{4}|all)$/,'');
+    const prefix = tableId.replace(/-(?:\d{4}|all|custom)$/,'');
     const root = getTableRoot();
     const namesArr = root.names; // may be null in legacy format
     const rawRows = (root.tables && root.tables[tableId]) ? root.tables[tableId] : [];
@@ -446,6 +446,136 @@ document.addEventListener("DOMContentLoaded", () => {
     // Set up all modals
     const {modal: settingsModal} = setupModal("settings-modal", "settings-button", "close-settings");
     const {modal: everyYearModal} = setupModal("every-year-modal", "show-every-year-btn", "close-every-year-modal");
+    const {modal: dateRangeModal} = setupModal("date-range-modal", null, "close-date-range");
+
+    // Wire date range modal extra buttons
+    const applyDateBtn = document.getElementById('apply-date-range');
+    const cancelDateBtn = document.getElementById('cancel-date-range');
+    const startInput = document.getElementById('date-start-input');
+    const endInput = document.getElementById('date-end-input');
+    let __pendingCustomActivate = null; // which tab or select triggered the modal
+
+    function getDailyRoot(){
+        const root = getTableRoot();
+        return (root && root.daily) ? root : null;
+    }
+
+    function getDailyBounds(){
+        const r = getDailyRoot();
+        if (!r) return {min: null, max: null};
+        const keys = Object.keys(r.daily).sort();
+        return {min: keys[0] || null, max: keys[keys.length-1] || null};
+    }
+
+    function openDateRangeModal(openerEl){
+        // Prefill inputs with last used or data bounds
+        const saved = JSON.parse(localStorage.getItem('customRange')||'{}');
+        const bounds = getDailyBounds();
+        startInput.value = saved.start || bounds.min || '';
+        endInput.value = saved.end || bounds.max || '';
+        __pendingCustomActivate = openerEl || null;
+        openModal(dateRangeModal, openerEl || document.body);
+    }
+
+    function updateCustomRangeInfo(startISO, endISO, show){
+        const info = document.getElementById('custom-range-info');
+        const setVis = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
+        if (!show){
+            setVis(info, false);
+            return;
+        }
+        if (!startISO || !endISO){
+            setVis(info, false);
+            return;
+        }
+        const s = startISO <= endISO ? startISO : endISO;
+        const e = endISO >= startISO ? endISO : startISO;
+        const d1 = new Date(s + 'T00:00:00');
+        const d2 = new Date(e + 'T00:00:00');
+        const msPerDay = 24*3600*1000;
+        const days = Math.floor((d2 - d1)/msPerDay) + 1;
+        const text = `${s} to ${e} — ${days} day${days===1?'':'s'}`;
+        if (info) info.textContent = text;
+        setVis(info, true);
+    }
+
+    function buildCustomTables(startISO, endISO){
+        const root = getDailyRoot();
+        if (!root || !root.daily){
+            alert('Custom date range is unavailable because per-day data is missing.');
+            return false;
+        }
+        if (!startISO || !endISO){
+            alert('Please select both start and end dates.');
+            return false;
+        }
+        const s = startISO <= endISO ? startISO : endISO;
+        const e = endISO >= startISO ? endISO : startISO;
+        const names = root.names || [];
+        const sumMap = {
+            artist: new Map(),
+            track: new Map(),
+            album: new Map()
+        };
+        const pushRow = (kind, idx, pt, pc) => {
+            const prev = sumMap[kind].get(idx) || [0,0];
+            sumMap[kind].set(idx, [prev[0]+(pt||0), prev[1]+(pc||0)]);
+        };
+        const dates = Object.keys(root.daily).sort();
+        for (const d of dates){
+            if (d < s || d > e) continue;
+            const day = root.daily[d];
+            if (!day) continue;
+            ["artist","track","album"].forEach(kind => {
+                const rows = day[kind] || [];
+                for (let i=0;i<rows.length;i++){
+                    const r = rows[i];
+                    const idx = r[0];
+                    const pt = r[1]||0;
+                    const pc = r[2]||0;
+                    pushRow(kind, idx, pt, pc);
+                }
+            });
+        }
+        root.tables = root.tables || {};
+        root.tables['artist-table-custom'] = Array.from(sumMap.artist.entries()).map(([idx,[pt,pc]])=>[idx,pt,pc]);
+        root.tables['track-table-custom'] = Array.from(sumMap.track.entries()).map(([idx,[pt,pc]])=>[idx,pt,pc]);
+        root.tables['album-table-custom'] = Array.from(sumMap.album.entries()).map(([idx,[pt,pc]])=>[idx,pt,pc]);
+        // Persist last used
+        localStorage.setItem('customRange', JSON.stringify({start: s, end: e}));
+        return true;
+    }
+
+    if (applyDateBtn){
+        applyDateBtn.addEventListener('click', () => {
+            const startVal = startInput.value;
+            const endVal = endInput.value;
+            if (!buildCustomTables(startVal, endVal)) return;
+
+            // Ensure custom section exists and render
+            ensureYearSection('custom');
+            // Activate custom tab/section
+            const customTab = document.querySelector('.year-tab[data-year="custom"]');
+            if (customTab) activateTab(customTab);
+            // Re-render custom tables
+            ['artist-table','track-table','album-table'].forEach(base => {
+                paginateTable(`${base}-custom`, itemsPerPage);
+            });
+            // Update info banners
+            updateCustomRangeInfo(startVal, endVal, true);
+            closeModal(dateRangeModal);
+        });
+    }
+    if (cancelDateBtn){
+        cancelDateBtn.addEventListener('click', () => {
+            closeModal(dateRangeModal);
+            // revert dropdown selection if it was set to custom
+            if (yearSelect && (yearSelect.value === 'custom' || yearSelect.value === '__placeholder')){
+                const activeTab = document.querySelector('.year-tab.active');
+                if (activeTab) yearSelect.value = activeTab.dataset.year;
+            }
+        });
+    }
 
     // Close modals with Escape key
     window.addEventListener("keydown", (e) => {
@@ -502,9 +632,23 @@ document.addEventListener("DOMContentLoaded", () => {
         section.style.display = 'block';
         section.setAttribute('aria-hidden', 'false');
 
+        // Update/show custom range info when appropriate
+        if (y === 'custom'){
+            const saved = JSON.parse(localStorage.getItem('customRange')||'{}');
+            updateCustomRangeInfo(saved.start, saved.end, !!(saved.start && saved.end));
+        } else {
+            updateCustomRangeInfo(null, null, false);
+        }
+
         // sync dropdown if present
-        if (yearSelect && yearSelect.value !== y) {
-            yearSelect.value = y;
+        if (yearSelect) {
+            // When activating Custom via tabs or Apply, move dropdown to a hidden placeholder
+            // so the user can select "Custom…" again to reopen the modal.
+            if (y === 'custom') {
+                yearSelect.value = '__placeholder';
+            } else if (yearSelect.value !== y) {
+                yearSelect.value = y;
+            }
         }
 
         // Ensure tables in this section are initialized/rendered for current mode
@@ -516,7 +660,7 @@ document.addEventListener("DOMContentLoaded", () => {
         section.querySelectorAll('.search-input').forEach(input => {
             // map "artist-table-2023-search" → "artist-table-2023" → prefix "artist-table"
             const tableId = input.id.replace(/-search$/, '');
-            const prefix = tableId.replace(/-(?:\d{4}|all)$/, '');
+            const prefix = tableId.replace(/-(?:\d{4}|all|custom)$/, '');
             const term = searchTerms[prefix] || "";
             input.value = term;
 
@@ -548,14 +692,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Click handler
         tab.addEventListener('click', () => {
-            activateTab(tab);
+            if (tab.dataset.year === 'custom') {
+                openDateRangeModal(tab);
+            } else {
+                activateTab(tab);
+            }
         });
 
         // Keyboard handler - activate on Enter or Space
         tab.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                activateTab(tab);
+                if (tab.dataset.year === 'custom') {
+                    openDateRangeModal(tab);
+                } else {
+                    activateTab(tab);
+                }
             }
         });
     });
@@ -592,9 +744,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         yearSelect.addEventListener('change', () => {
             const val = yearSelect.value;
-            const targetTab = document.querySelector(`.year-tab[data-year="${val}"]`);
-            if (targetTab) {
-                activateTab(targetTab);
+            if (val === 'custom') {
+                openDateRangeModal(yearSelect);
+                // Immediately switch the dropdown to a hidden placeholder so selecting
+                // "Custom…" again will fire change and reopen the modal.
+                yearSelect.value = '__placeholder';
+            } else {
+                const targetTab = document.querySelector(`.year-tab[data-year="${val}"]`);
+                if (targetTab) activateTab(targetTab);
+                // hide custom info when switching away via dropdown
+                updateCustomRangeInfo(null, null, false);
             }
         });
     }

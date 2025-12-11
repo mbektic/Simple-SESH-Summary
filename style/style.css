@@ -13,6 +13,13 @@ body {
     margin: 0;
 }
 
+.custom-range-info {
+    margin: 6px auto 10px;
+    text-align: center;
+    font-size: 0.95rem;
+    color: #666;
+}
+
 h1, h2 {
     text-align: center;
 }
@@ -503,6 +510,11 @@ a, a:visited {
     margin-top: 16px;
 }
 
+#date-range-modal .modal-header,
+#date-range-modal .setting-item {
+    margin-bottom: 1em;
+}
+
 /****************************
 * FULLSCREEN LOADING OVERLAY
 *****************************/
@@ -852,8 +864,9 @@ a, a:visited {
         justify-content: center;
     }
 
-    .year-tab {
-        margin: 4px 6px;
+    .year-tab,
+    .custom-range-info {
+        margin: 1em 6px 0;
         font-size: 2em;
     }
 
@@ -959,6 +972,15 @@ a, a:visited {
     .personality-bar-wrapper {
         height: 40px;
     }
+
+    #date-range-modal .stats-button {
+        font-size: 2em;
+    }
+
+    #date-range-modal input {
+        font-size: 2em;
+    }
+
 }
 
 /* Extra small phones */
