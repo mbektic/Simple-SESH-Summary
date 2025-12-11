@@ -17,7 +17,7 @@ from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.18.0"
+VERSION = "1.18.1"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments

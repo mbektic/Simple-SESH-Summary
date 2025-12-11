@@ -569,8 +569,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (cancelDateBtn){
         cancelDateBtn.addEventListener('click', () => {
             closeModal(dateRangeModal);
-            // revert dropdown selection if it was set to custom
-            if (yearSelect && (yearSelect.value === 'custom' || yearSelect.value === '__placeholder')){
+            // Ensure dropdown mirrors the active tab if it still shows custom
+            if (yearSelect && yearSelect.value === 'custom'){
                 const activeTab = document.querySelector('.year-tab.active');
                 if (activeTab) yearSelect.value = activeTab.dataset.year;
             }
@@ -611,6 +611,40 @@ document.addEventListener("DOMContentLoaded", () => {
     // year-tab click handler
     const yearTabs = document.querySelectorAll('.year-tab');
     const yearSelect = document.getElementById('year-select');
+    // Track the last non-custom year so the dropdown never stays on "custom"
+    let lastNonCustomYear = 'all';
+
+    // Helper: build a compact label for the current custom range
+    function buildCustomRangeLabel(startISO, endISO){
+        if (!startISO || !endISO) return null;
+        const s = startISO <= endISO ? startISO : endISO;
+        const e = endISO >= startISO ? endISO : startISO;
+        return `${s} to ${e}`;
+        }
+
+    // Helper: ensure a dedicated option that reflects the selected custom range exists
+    function ensureCustomRangeOption(label){
+        if (!yearSelect) return null;
+        const val = 'custom-range';
+        let opt = yearSelect.querySelector(`option[value="${val}"]`);
+        if (!label){
+            return opt;
+        }
+        if (!opt){
+            opt = document.createElement('option');
+            opt.value = val;
+            const customStatic = yearSelect.querySelector('option[value="custom"]');
+            if (customStatic && customStatic.nextSibling){
+                yearSelect.insertBefore(opt, customStatic.nextSibling);
+            } else if (customStatic){
+                yearSelect.appendChild(opt);
+            } else {
+                yearSelect.appendChild(opt);
+            }
+        }
+        opt.textContent = label;
+        return opt;
+    }
 
     // Function to activate a tab
     function activateTab(tab) {
@@ -640,14 +674,25 @@ document.addEventListener("DOMContentLoaded", () => {
             updateCustomRangeInfo(null, null, false);
         }
 
-        // sync dropdown if present
+        // Update last non-custom year and sync dropdown if present
+        if (y !== 'custom') {
+            lastNonCustomYear = y;
+        }
         if (yearSelect) {
-            // When activating Custom via tabs or Apply, move dropdown to a hidden placeholder
-            // so the user can select "Custom…" again to reopen the modal.
-            if (y === 'custom') {
-                yearSelect.value = '__placeholder';
-            } else if (yearSelect.value !== y) {
-                yearSelect.value = y;
+            // If switching to the custom section and a range exists, select the dynamic range option; otherwise fallback
+            let targetVal = y;
+            if (y === 'custom'){
+                const saved = JSON.parse(localStorage.getItem('customRange')||'{}');
+                const label = buildCustomRangeLabel(saved.start, saved.end);
+                if (label){
+                    ensureCustomRangeOption(label);
+                    targetVal = 'custom-range';
+                } else {
+                    targetVal = lastNonCustomYear;
+                }
+            }
+            if (yearSelect.value !== targetVal) {
+                yearSelect.value = targetVal;
             }
         }
 
@@ -736,19 +781,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Wire up year dropdown (mobile)
     if (yearSelect) {
-        // initialize value from active tab
+        // initialize value from active tab, and set lastNonCustomYear
         const activeTab = document.querySelector('.year-tab.active');
         if (activeTab) {
-            yearSelect.value = activeTab.dataset.year;
+            const initY = activeTab.dataset.year;
+            if (initY !== 'custom') {
+                lastNonCustomYear = initY;
+                yearSelect.value = initY;
+            } else {
+                // If custom is active on load and we have a saved range, show it; else fallback
+                const saved = JSON.parse(localStorage.getItem('customRange')||'{}');
+                const label = buildCustomRangeLabel(saved.start, saved.end);
+                if (label){
+                    ensureCustomRangeOption(label);
+                    yearSelect.value = 'custom-range';
+                } else {
+                    yearSelect.value = lastNonCustomYear;
+                }
+            }
         }
 
         yearSelect.addEventListener('change', () => {
             const val = yearSelect.value;
             if (val === 'custom') {
+                // Open modal but keep the current active tab showing; reset the dropdown
+                // back to the last non-custom year so the user can select Custom again later.
                 openDateRangeModal(yearSelect);
-                // Immediately switch the dropdown to a hidden placeholder so selecting
-                // "Custom…" again will fire change and reopen the modal.
-                yearSelect.value = '__placeholder';
+                // If a custom range option exists, prefer leaving that selected; otherwise fallback
+                const exists = yearSelect.querySelector('option[value="custom-range"]');
+                yearSelect.value = exists ? 'custom-range' : lastNonCustomYear;
+            } else if (val === 'custom-range') {
+                const targetTab = document.querySelector(`.year-tab[data-year="custom"]`);
+                if (targetTab) activateTab(targetTab);
             } else {
                 const targetTab = document.querySelector(`.year-tab[data-year="${val}"]`);
                 if (targetTab) activateTab(targetTab);

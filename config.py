@@ -20,9 +20,9 @@ INPUT_DIR = ""
 #     as this script with the name summary.html. No need to add the .html
 OUTPUT_FILE = "summary"
 
-# Compress the embedded table JSON in the generated HTML using DEFLATE+Base64.
-# Keeps the result as a single file; browser inflates at runtime. Disable if you
-# prefer plain JSON embedding (slightly larger files, marginally faster first paint).
+# Compress the embedded table JSON in the generated HTML using DEFLATE+Base64, which
+# the browser inflates at runtime. Disable if you prefer plain JSON embedding.
+# Larger files, but faster first paint when disabled.
 COMPRESS_TABLE_DATA = True
 
 

@@ -266,10 +266,9 @@ def build_year_dropdown(years: List[int]) -> str:
     Returns:
         str: HTML for a labeled <select> that mirrors the year tabs
     """
-    # Add a hidden placeholder option so selecting "Custom…" can reset to it,
-    # allowing users to select Custom again to reopen the modal on mobile.
-    options = '<option value="__placeholder" hidden style="display:none">Custom…</option>' + \
-              '<option value="all" selected>All</option>' + "".join(
+    # iOS Safari can display hidden <option>s; avoid placeholders and handle
+    # re-selecting Custom via JS by resetting the value after opening the modal.
+    options = '<option value="all" selected>All</option>' + "".join(
         f'<option value="{yr}">{yr}</option>' for yr in years
     ) + '<option value="custom">Custom…</option>'
     return f'''<div id="year-dropdown" class="year-dropdown" aria-label="Year selection">

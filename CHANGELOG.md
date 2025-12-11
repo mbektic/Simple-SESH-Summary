@@ -5,9 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] 2025-12-11
+### Fixed
+- Fixed a bug with iPhones where there were two "Custom..." options showing up.
+
 ## [1.18.0] 2025-12-11
 ### Added 
 - Added the ability to set a custom date range for the tables. 
+  - Though the last update brought us down to 2.4MB, all the new data brings us back to ~5.3MB but it will allow for new features in the future, like this one.
 
 ## [1.17.0] 2025-12-10
 ### Added 
