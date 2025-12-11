@@ -17,7 +17,7 @@ from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.18.1"
+VERSION = "1.18.2"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments
@@ -135,7 +135,7 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
             all_section = build_all_section(all_data)
             year_sections = build_year_sections(years)
             sections = all_section + year_sections
-            stats_html = build_stats_html(stats_data, daily_counts, otd_data, yearly)
+            stats_html = build_stats_html(stats_data, daily_counts, yearly)
             table_data = build_tables_data(all_data, yearly, daily_entity)
         except Exception as e:
             logging.error(f"Error building HTML content: {e}")

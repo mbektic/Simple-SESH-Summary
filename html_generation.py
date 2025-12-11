@@ -393,7 +393,7 @@ def build_year_sections(years: List[int]) -> str:
     return sections
 
 
-def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], otd_data, yearly=None) -> str:
+def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], yearly=None) -> str:
     """
     Build HTML for the statistics section.
 
@@ -615,7 +615,6 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], o
         const startDate = new Date("{first_date}");
         const endDate   = new Date("{last_date}");
         const counts = JSON.parse(`{daily_counts_json}`);
-        const onThisDayData = {otd_data};
         {print_file("scripts/heatmap.js")}
         {print_file("scripts/otd.js")}
       </script>
@@ -684,9 +683,62 @@ def generate_personality_html(stats_data: Dict[str, Any]) -> str:
     """
 
 
+def _compact_table_data(obj: Any) -> Dict[str, Any]:
+    """Ensure table_data is in compact schema {"names": [...], "tables": {...}, "daily"?: {...}}.
+
+    Accepted inputs:
+    - Already compact shape: returned as-is.
+    - Legacy shape: { tableId: [[nameStr, pt, pc], ...], ... } -> converted to compact names+indices.
+    - If shape is unknown, return an empty structure to avoid client errors.
+    """
+    try:
+        if isinstance(obj, dict) and "names" in obj and "tables" in obj:
+            # Already in compact format
+            return obj  # type: ignore[return-value]
+
+        # Legacy: mapping tableId -> rows of [name(str), pt, pc]
+        if isinstance(obj, dict):
+            name_to_idx: Dict[str, int] = {}
+            names: List[str] = []
+
+            def idx_of(n: str) -> int:
+                i = name_to_idx.get(n)
+                if i is None:
+                    i = len(names)
+                    name_to_idx[n] = i
+                    names.append(n)
+                return i
+
+            tables_out: Dict[str, List[List[int]]] = {}
+            for table_id, rows in obj.items():
+                try:
+                    new_rows: List[List[int]] = []
+                    if isinstance(rows, list):
+                        for r in rows:
+                            if isinstance(r, (list, tuple)) and r:
+                                nm = r[0]
+                                pt = int(r[1]) if len(r) > 1 else 0
+                                pc = int(r[2]) if len(r) > 2 else 0
+                                if isinstance(nm, str):
+                                    new_rows.append([idx_of(nm), pt, pc])
+                                elif isinstance(nm, int):
+                                    # It was already index-based, just pass through
+                                    new_rows.append([nm, pt, pc])
+                    if new_rows:
+                        tables_out[str(table_id)] = new_rows
+                except Exception:
+                    # Skip malformed table, continue best-effort
+                    continue
+
+            return {"names": names, "tables": tables_out}
+    except Exception:
+        pass
+    return {"names": [], "tables": {}}
+
+
 def generate_html_content(tabs: str, sections: str, stats_html: str, github_url: str, version: str,
                           personality_html: str, year_dropdown: str = "",
-                          table_data: Dict[str, List[List[Any]]] | None = None,
+                          table_data: Dict[str, Any] | None = None,
                           compress: bool | None = None) -> str:
     """
     Generate the complete HTML content for the summary report.
@@ -716,11 +768,15 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
                 except Exception:
                     do_compress = False
 
+            # Ensure we always embed compacted schema to reduce size and stabilize structure
+            compacted = _compact_table_data(table_data)
+
             if do_compress:
                 try:
-                    json_str = json.dumps(table_data, separators=(",", ":"))
+                    json_str = json.dumps(compacted, separators=(",", ":"))
                     b = json_str.encode('utf-8')
-                    gz = gzip.compress(b)
+                    # Use maximum compression level for smaller output size
+                    gz = gzip.compress(b, compresslevel=9)
                     b64 = base64.b64encode(gz).decode('ascii')
                     data_script = f"""
         <script id=\"table-data-compressed\" type=\"application/json\">{b64}</script>
@@ -728,11 +784,11 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
                 except Exception as e:
                     logging.error(f"Compression failed, falling back to plain JSON: {e}")
                     data_script = f"""
-        <script id=\"table-data\" type=\"application/json\">{json.dumps(table_data)}</script>
+        <script id=\"table-data\" type=\"application/json\">{json.dumps(compacted, separators=(",", ":"))}</script>
                     """
             else:
                 data_script = f"""
-        <script id=\"table-data\" type=\"application/json\">{json.dumps(table_data)}</script>
+        <script id=\"table-data\" type=\"application/json\">{json.dumps(compacted, separators=(",", ":"))}</script>
                 """
     except Exception as e:
         logging.error(f"Failed to serialize table data: {e}")
