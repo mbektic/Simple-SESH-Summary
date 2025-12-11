@@ -281,16 +281,6 @@ def process_entry(
                 play_counted, skip_count, offline_count, track_skip_counts
             )
 
-        # Year Filter
-        # if int(entry.get("ts")[:4]) < 2018:
-        #     logging.info(f"Skipping entry because it's less than the year filter, skipping: {entry.get('master_metadata_track_name', 'Unknown track')} Time: {entry.get('ts')[:4]}")
-        #     return (
-        #         yearly, dates_set, first_ts, first_entry, last_ts, last_entry,
-        #         artist_set, album_set, track_set, artist_tracks, daily_counts,
-        #         monthly_counts, weekday_counts, hour_counts, play_times,
-        #         play_counted, skip_count, offline_count, track_skip_counts
-        #         )
-
         # Process entries with artist information
         if entry.get("master_metadata_album_artist_name"):
             # Get the artist name or use fallback

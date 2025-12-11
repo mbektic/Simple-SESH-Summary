@@ -8,7 +8,7 @@ MIN_MILLISECONDS = 20000
 
 # Optional minimum year filter. If set (e.g., 2020), data before that year will be ignored.
 # Set to None to disable year filtering.
-MIN_YEAR = 2022
+MIN_YEAR = None
 
 
 # Directory, or folder, on your computer where your Spotify JSON files are located.
@@ -20,6 +20,11 @@ INPUT_DIR = ""
 #     as this script with the name summary.html. No need to add the .html
 OUTPUT_FILE = "summary"
 
+# Compress the embedded table JSON in the generated HTML using DEFLATE+Base64.
+# Keeps the result as a single file; browser inflates at runtime. Disable if you
+# prefer plain JSON embedding (slightly larger files, marginally faster first paint).
+COMPRESS_TABLE_DATA = True
+
 
 def validate_config():
     """
@@ -29,7 +34,7 @@ def validate_config():
     Returns:
         bool: True if validation succeeded, False if critical errors were found
     """
-    global MIN_MILLISECONDS, INPUT_DIR, OUTPUT_FILE, MIN_YEAR
+    global MIN_MILLISECONDS, INPUT_DIR, OUTPUT_FILE, MIN_YEAR, COMPRESS_TABLE_DATA
 
     # Validate MIN_MILLISECONDS
     if not isinstance(MIN_MILLISECONDS, int) or MIN_MILLISECONDS < 0:
@@ -65,6 +70,11 @@ def validate_config():
     if not OUTPUT_FILE or not isinstance(OUTPUT_FILE, str):
         logging.error("OUTPUT_FILE cannot be empty and must be a string.")
         return False
+
+    # Validate COMPRESS_TABLE_DATA
+    if not isinstance(COMPRESS_TABLE_DATA, bool):
+        logging.warning(f"Invalid COMPRESS_TABLE_DATA value: {COMPRESS_TABLE_DATA}. Using True.")
+        COMPRESS_TABLE_DATA = True
 
     # Check if the directory part of the output file path exists
     output_dir = os.path.dirname(OUTPUT_FILE)

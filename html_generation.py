@@ -6,6 +6,9 @@ Spotify Extended Streaming History summary report.
 """
 import json
 import logging
+import re
+import base64
+import gzip
 from typing import Dict, List, Any, DefaultDict
 
 
@@ -72,6 +75,59 @@ def print_file(path: str) -> str:
     return contents
 
 
+def minify_css(css: str) -> str:
+    """
+    Minify CSS safely:
+    - Remove comments
+    - Collapse whitespace
+    - Remove unnecessary spaces around punctuation
+    - Remove trailing semicolons before closing braces
+    """
+    try:
+        # Remove /* */ comments
+        css = re.sub(r"/\*[^!*][\s\S]*?\*/", "", css)
+        # Collapse whitespace
+        css = re.sub(r"\s+", " ", css)
+        # Remove spaces around punctuation
+        css = re.sub(r"\s*([{}:;,>])\s*", r"\1", css)
+        # Remove trailing semicolons before }
+        css = re.sub(r";\}", "}", css)
+        # Trim
+        return css.strip()
+    except Exception:
+        # On any failure, return original to be safe
+        return css
+
+
+def minify_js(js: str) -> str:
+    """
+    Conservatively minify JS:
+    - Remove block comments (/* */)
+    - Trim lines
+    - Collapse multiple blank lines
+    Does NOT remove // comments to avoid harming URLs inside strings.
+    """
+    try:
+        # Remove block comments (but keep license /*! ... */)
+        js = re.sub(r"/\*(?!\!)[\s\S]*?\*/", "", js)
+        # Trim each line
+        lines = [ln.strip() for ln in js.splitlines()]
+        # Collapse consecutive empty lines to a single empty line
+        out_lines: List[str] = []
+        empty = 0
+        for ln in lines:
+            if ln == "":
+                empty += 1
+                if empty > 1:
+                    continue
+            else:
+                empty = 0
+            out_lines.append(ln)
+        return "\n".join(out_lines).strip()
+    except Exception:
+        return js
+
+
 def print_styles() -> str:
     """
     Read CSS files and return HTML style tags with the CSS content.
@@ -83,17 +139,13 @@ def print_styles() -> str:
         FileNotFoundError: If any of the CSS files cannot be found
     """
     try:
-        base_style = print_file("style/style.css")
-        dark_style = print_file("style/dark.css")
-        light_style = print_file("style/light.css")
+        base_style = minify_css(print_file("style/style.css"))
+        dark_style = minify_css(print_file("style/dark.css"))
+        light_style = minify_css(print_file("style/light.css"))
 
         return f"""
-        <style id="base-style">
-            {base_style}
-        </style>
-        <style id="theme-style">
-            {dark_style}
-        </style>
+        <style id="base-style">{base_style}</style>
+        <style id="theme-style">{dark_style}</style>
         <script>
             const DARK_CSS = `{escape_js_string(dark_style)}`;
             const LIGHT_CSS = `{escape_js_string(light_style)}`;
@@ -111,9 +163,45 @@ def generate_js() -> str:
     Returns:
         str: JavaScript code as a string
     """
-    return f"""<script>
-    {print_file("scripts/scripts.js")}
-    </script>"""
+    js = print_file("scripts/scripts.js")
+    js_min = minify_js(js)
+    return f"""<script>{js_min}</script>"""
+
+
+def predecode_script() -> str:
+    """Return a small inline script that inflates base64-gzipped table data when supported.
+
+    Important: we wait for DOMContentLoaded so the <script id="table-data-compressed"> element in the body exists
+    before attempting to read and inflate it.
+    """
+    return (
+        "<script>"
+        "(function(){\n"
+        "  function run(){\n"
+        "    var cEl=document.getElementById('table-data-compressed');\n"
+        "    if(!cEl){ if(!window.__TABLE_DATA_PROM) window.__TABLE_DATA_PROM = Promise.resolve(); return; }\n"
+        "    var b64=cEl.textContent.trim();\n"
+        "    function base64ToBytes(b64){var bin=atob(b64);var len=bin.length;var bytes=new Uint8Array(len);for(var i=0;i<len;i++){bytes[i]=bin.charCodeAt(i);}return bytes;}\n"
+        "    function inflateWithDS(bytes){\n"
+        "      var ds=new DecompressionStream('gzip');\n"
+        "      var stream=new Response(new Blob([bytes]).stream().pipeThrough(ds));\n"
+        "      return stream.arrayBuffer().then(function(buf){return new TextDecoder().decode(buf);});\n"
+        "    }\n"
+        "    window.__TABLE_DATA_PROM = (function(){\n"
+        "      try{\n"
+        "        var bytes=base64ToBytes(b64);\n"
+        "        if(typeof DecompressionStream==='function'){\n"
+        "          return inflateWithDS(bytes).then(function(txt){ window.__TABLE_DATA_CACHE = JSON.parse(txt); });\n"
+        "        }\n"
+        "      }catch(e){ console.error('Predecode failed', e); }\n"
+        "      // Fallback: resolve immediately; main code will try #table-data (uncompressed) if present.\n"
+        "      return Promise.resolve();\n"
+        "    })();\n"
+        "  }\n"
+        "  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', run, {once:true}); } else { run(); }\n"
+        "})();"
+        "</script>"
+    )
 
 
 def build_table(title: str, playtime_counts: Dict[str, int], playcount_counts: Dict[str, int], table_id: str) -> str:
@@ -132,39 +220,20 @@ def build_table(title: str, playtime_counts: Dict[str, int], playcount_counts: D
     mode_string_playtime = "Playtime"
     mode_string_playcount = "Plays"
 
-    # Playtime rows
-    playtime_rows = "\n".join(
-        f"<tr><td>{rank}</td><td>{name}</td><td>{ms_to_hms(count)}</td></tr>"
-        for rank, (name, count) in
-        enumerate(sorted(playtime_counts.items(), key=lambda x: x[1], reverse=True), start=1)
-    )
-
-    # Play count rows
-    playcount_rows = "\n".join(
-        f"<tr><td>{rank}</td><td>{name}</td><td>{count}</td></tr>"
-        for rank, (name, count) in
-        enumerate(sorted(playcount_counts.items(), key=lambda x: x[1], reverse=True), start=1)
-    )
-
+    # Data-first rendering: emit a single table skeleton; rows are rendered client-side from a JSON blob.
+    # The third column label will be updated by JS based on the current mode (Playtime/Plays).
     return f"""
     <h2>{title}</h2>
-    <input type="text" id="{table_id}-search" placeholder="Search for {title}..." class="search-input" />
+    <input type=\"text\" id=\"{table_id}-search\" placeholder=\"Search for {title}...\" class=\"search-input\" />
 
-    <div id="{table_id}-playcount" style="display: none;">
-        <table>
-            <thead><tr><th>Rank</th><th>{title}</th><th>{mode_string_playcount}</th></tr></thead>
-            <tbody>{playcount_rows}</tbody>
+    <div id=\"{table_id}-container\">
+        <table data-title=\"{title}\">
+            <thead><tr><th>Rank</th><th>{title}</th><th id=\"{table_id}-metric-label\">{mode_string_playtime}</th></tr></thead>
+            <tbody id=\"{table_id}-tbody\"></tbody>
         </table>
     </div>
 
-    <div id="{table_id}-playtime">
-        <table>
-            <thead><tr><th>Rank</th><th>{title}</th><th>{mode_string_playtime}</th></tr></thead>
-            <tbody>{playtime_rows}</tbody>
-        </table>
-    </div>
-
-    <div class="pagination" id="{table_id}-nav"></div>
+    <div class=\"pagination\" id=\"{table_id}-nav\"></div>
     """
 
 
@@ -227,31 +296,69 @@ def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
     return sections
 
 
-def build_year_sections(years: List[int], yearly: DefaultDict[int, Dict[str, DefaultDict[str, int]]]) -> str:
+def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
+                      yearly: DefaultDict[int, Dict[str, DefaultDict[str, int]]]) -> Dict[str, Any]:
+    """
+    Build a compact data structure for all tables to be rendered client-side.
+
+    Returns a dictionary with two keys:
+      - "names": a deduplicated list of all entity names (artists/tracks/albums)
+      - "tables": a mapping of table_id -> list of [nameIndex, playtime_ms, playcount]
+
+    Table IDs follow existing convention:
+      - artist-table-all, track-table-all, album-table-all
+      - artist-table-YYYY, track-table-YYYY, album-table-YYYY
+    """
+    tables: Dict[str, List[List[Any]]] = {}
+    # Deduplicate names across all tables
+    name_to_index: Dict[str, int] = {}
+    names: List[str] = []
+
+    def get_index(name: str) -> int:
+        if name in name_to_index:
+            return name_to_index[name]
+        idx = len(names)
+        name_to_index[name] = idx
+        names.append(name)
+        return idx
+
+    def build_rows(name_to_ms: Dict[str, int], name_to_pc: Dict[str, int]) -> List[List[Any]]:
+        rows_i: List[List[Any]] = []
+        # Use union of keys to be safe (though both dicts should align)
+        all_names = set(name_to_ms.keys()) | set(name_to_pc.keys())
+        for nm in all_names:
+            pt = int(name_to_ms.get(nm, 0))
+            pc = int(name_to_pc.get(nm, 0))
+            rows_i.append([get_index(nm), pt, pc])
+        return rows_i
+
+    # All-section tables
+    tables["artist-table-all"] = build_rows(all_data["artist_time"], all_data["artist_counts"])
+    tables["track-table-all"] = build_rows(all_data["track_time"], all_data["track_counts"])
+    tables["album-table-all"] = build_rows(all_data["album_time"], all_data["album_counts"])
+
+    # Per-year tables
+    for yr, ydata in yearly.items():
+        tables[f"artist-table-{yr}"] = build_rows(ydata["artist_time"], ydata["artist_counts"])
+        tables[f"track-table-{yr}"] = build_rows(ydata["track_time"], ydata["track_counts"])
+        tables[f"album-table-{yr}"] = build_rows(ydata["album_time"], ydata["album_counts"])
+
+    return {"names": names, "tables": tables}
+
+
+def build_year_sections(years: List[int]) -> str:
     """
     Build HTML for per-year sections with tables for artists, tracks, and albums.
 
     Args:
         years (List[int]): List of years
-        yearly (DefaultDict[int, Dict[str, DefaultDict[str, int]]]): Dictionary of yearly statistics
 
     Returns:
         str: HTML for per-year sections as a string
     """
     sections = ""
     for yr in years:
-        style = "none"
-        sections += f'<div class="year-section" id="year-{yr}" style="display: {style};">'
-        sections += build_table("Artists",
-                                yearly[yr]["artist_time"], yearly[yr]["artist_counts"],
-                                f"artist-table-{yr}")
-        sections += build_table("Tracks",
-                                yearly[yr]["track_time"], yearly[yr]["track_counts"],
-                                f"track-table-{yr}")
-        sections += build_table("Albums",
-                                yearly[yr]["album_time"], yearly[yr]["album_counts"],
-                                f"album-table-{yr}")
-        sections += "</div>"
+        sections += f'<div class="year-section" id="year-{yr}" style="display: none;"></div>'
     return sections
 
 
@@ -273,7 +380,7 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], o
     first_date = stats_data.get('first_str', "")
     last_date = stats_data.get('last_str', "")
 
-    # Build simple per-year listening chart (playtime vs playcount) if yearly data provided
+    # Build a simple per-year listening chart (playtime vs playcount) if yearly data provided
     year_chart_html = ""
     try:
         if yearly:
@@ -284,7 +391,7 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], o
             max_pt = max(pt_totals) if pt_totals else 1
             max_pc = max(pc_totals) if pc_totals else 1
 
-            # Build horizontal row markup with full year label on the left and width‑scaled bars
+            # Build horizontal row markup with a full year label on the left and width‑scaled bars
             def build_horizontal_rows(values: list[int], max_val: int, include_pt: bool) -> str:
                 rows = []
                 for y, v_pc, v_pt in zip(years_sorted, pc_totals, pt_totals):
@@ -547,7 +654,9 @@ def generate_personality_html(stats_data: Dict[str, Any]) -> str:
 
 
 def generate_html_content(tabs: str, sections: str, stats_html: str, github_url: str, version: str,
-                          personality_html: str, year_dropdown: str = "") -> str:
+                          personality_html: str, year_dropdown: str = "",
+                          table_data: Dict[str, List[List[Any]]] | None = None,
+                          compress: bool | None = None) -> str:
     """
     Generate the complete HTML content for the summary report.
 
@@ -562,6 +671,41 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
     Returns:
         str: Complete HTML content as a string
     """
+    data_script = ""
+    try:
+        if table_data is not None:
+            # Decide compression
+            do_compress = False
+            if compress is not None:
+                do_compress = compress
+            else:
+                try:
+                    from config import COMPRESS_TABLE_DATA as _CTD
+                    do_compress = bool(_CTD)
+                except Exception:
+                    do_compress = False
+
+            if do_compress:
+                try:
+                    json_str = json.dumps(table_data, separators=(",", ":"))
+                    b = json_str.encode('utf-8')
+                    gz = gzip.compress(b)
+                    b64 = base64.b64encode(gz).decode('ascii')
+                    data_script = f"""
+        <script id=\"table-data-compressed\" type=\"application/json\">{b64}</script>
+                    """
+                except Exception as e:
+                    logging.error(f"Compression failed, falling back to plain JSON: {e}")
+                    data_script = f"""
+        <script id=\"table-data\" type=\"application/json\">{json.dumps(table_data)}</script>
+                    """
+            else:
+                data_script = f"""
+        <script id=\"table-data\" type=\"application/json\">{json.dumps(table_data)}</script>
+                """
+    except Exception as e:
+        logging.error(f"Failed to serialize table data: {e}")
+
     return f"""
     <!DOCTYPE html>
     <html style='overflow: hidden;'>
@@ -570,12 +714,14 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
         <title>Spotify Summary</title>
         <link href='https://fonts.googleapis.com/css?family=JetBrains Mono' rel='stylesheet'>
         {print_styles()}
+        {predecode_script()}
         {generate_js()}
     </head>
     <body style='overflow: hidden;'>
         {print_file("html/title_bar.html")}
         <div id="year-tabs">{tabs}</div>
         {year_dropdown}
+        {data_script}
         {sections}
         {personality_html}
         {stats_html}
@@ -587,6 +733,52 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
     </footer>
     </html>
     """
+
+
+def minify_html(html: str) -> str:
+    """
+    Minify HTML string while preserving content inside <script> and <style> tags.
+
+    - Removes HTML comments
+    - Collapses redundant whitespace and newlines
+    - Removes whitespace between tags
+
+    Args:
+        html (str): Raw HTML content
+
+    Returns:
+        str: Minified HTML content
+    """
+    # Split by blocks to preserve exact contents for tags that are whitespace-sensitive
+    pattern = re.compile(r"(?is)(<script\b[^>]*?>.*?</script>|<style\b[^>]*?>.*?</style>|<pre\b[^>]*?>.*?</pre>|<textarea\b[^>]*?>.*?</textarea>)")
+    parts = []
+    last = 0
+    for m in pattern.finditer(html):
+        # Process preceding non-script/style chunk
+        head = html[last:m.start()]
+        if head:
+            # Remove comments
+            head = re.sub(r"<!--.*?-->", "", head, flags=re.S)
+            # Collapse whitespace
+            head = re.sub(r"\s+", " ", head)
+            # Remove spaces between tags
+            head = re.sub(r">\s+<", "><", head)
+            head = head.strip()
+            parts.append(head)
+        # Append the script/style block unchanged
+        parts.append(m.group(1))
+        last = m.end()
+
+    # Process trailing chunk
+    tail = html[last:]
+    if tail:
+        tail = re.sub(r"<!--.*?-->", "", tail, flags=re.S)
+        tail = re.sub(r"\s+", " ", tail)
+        tail = re.sub(r">\s+<", "><", tail)
+        tail = tail.strip()
+        parts.append(tail)
+
+    return "".join(parts)
 
 
 def write_html_to_file(html_content: str, output_file: str) -> None:
@@ -602,8 +794,10 @@ def write_html_to_file(html_content: str, output_file: str) -> None:
         PermissionError: If the file cannot be written due to permission issues
     """
     try:
+        # Minify the final HTML output while keeping source files unmodified
+        minimized = minify_html(html_content)
         with open(output_file, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+            f.write(minimized)
         logging.info(f"✅ HTML report generated: {output_file}")
     except (IOError, PermissionError) as e:
         logging.error(f"Failed to write HTML report to {output_file}: {e}")

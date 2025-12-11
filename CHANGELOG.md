@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] 2025-12-10
+### Added 
+- Wrote crude minify functions for the resulting HTML file.
+- Added the ability to compress the JSON in the resulting HTML file, with a config option to turn it off.
+
+### Changed
+- Altered how the table data is stored in the resulting HTML file, resulting in a much smaller file size.
+  - My 11-year summary was 18.9MB
+  - With JSON compression it's 2.4MB
+  - Without JSON compression it's 4.5MB
+- Cleand up how tables are generated.
+- More improvements to the mobile styling.
+
 ## [1.16.2] 2025-12-10
 ### Changed
 - The year selector is now a dropdown instead of a tab menu on mobile.

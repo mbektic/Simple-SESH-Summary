@@ -1,20 +1,82 @@
 const themeStyle = document.getElementById("theme-style");
 const currentTheme = localStorage.getItem("theme") || "dark";
 themeStyle.textContent = currentTheme === "dark" ? DARK_CSS : LIGHT_CSS;
-const originalRowCache = {};
+let __TABLE_DATA_CACHE = null;
+function getTableData() {
+    try {
+        // Prefer the globally decompressed cache when compression is enabled
+        if (window.__TABLE_DATA_CACHE && typeof window.__TABLE_DATA_CACHE === 'object') {
+            __TABLE_DATA_CACHE = window.__TABLE_DATA_CACHE;
+            return __TABLE_DATA_CACHE;
+        }
+
+        // If we've already populated a local cache (uncompressed path), return it
+        if (__TABLE_DATA_CACHE !== null) return __TABLE_DATA_CACHE;
+
+        // Fallback: uncompressed inline JSON
+        const el = document.getElementById('table-data');
+        if (el) {
+            __TABLE_DATA_CACHE = JSON.parse(el.textContent);
+            return __TABLE_DATA_CACHE;
+        }
+
+        // If compressed node exists but global cache isn't ready yet, return empty object for now
+        const cel = document.getElementById('table-data-compressed');
+        if (cel) {
+            console.debug('Waiting for compressed table data to be inflated…');
+        }
+        __TABLE_DATA_CACHE = {};
+        return __TABLE_DATA_CACHE;
+    } catch (e) {
+        console.error('Failed to obtain table data', e);
+        __TABLE_DATA_CACHE = {};
+        return __TABLE_DATA_CACHE;
+    }
+}
+
+// Normalize table data to a root object with shape:
+//   { names: string[] | null, tables: { [tableId]: Array<[nameIndexOrString, pt, pc]> } }
+function getTableRoot() {
+    const raw = getTableData();
+    if (raw && typeof raw === 'object' && raw.names && raw.tables) {
+        return raw; // new compact format
+    }
+    // fallback: legacy flat map of tableId -> Array<[name, pt, pc]>
+    return { names: null, tables: (raw || {}) };
+}
 const searchTerms = {};
 let itemsPerPage = parseInt(localStorage.getItem("itemsPerPage"), 5) || 5;
+
+function formatMs(ms){
+    const sec = Math.floor(ms/1000);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = sec%60;
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${pad(h)}h ${pad(m)}m ${pad(s)}s`;
+}
 
 window.onload = () => {
     const overlay = document.getElementById('loading-overlay');
 
+    function initVisible() {
+        // Initialize only the visible section to keep first paint fast
+        const visible = Array.from(document.querySelectorAll('.year-section')).find(sec => sec.style.display !== 'none');
+        if (visible) {
+            const yr = visible.id.split('-')[1];
+            ['artist-table','track-table','album-table'].forEach(base =>
+                paginateTable(`${base}-${yr}`, itemsPerPage)
+            );
+        }
+    }
+
     requestAnimationFrame(() => {
-        document.querySelectorAll('.year-section').forEach(sec => {
-            const yr = sec.id.split('-')[1];
-            paginateTable(`artist-table-${yr}`, itemsPerPage);
-            paginateTable(`track-table-${yr}`, itemsPerPage);
-            paginateTable(`album-table-${yr}`, itemsPerPage);
-        });
+        const prom = window.__TABLE_DATA_PROM;
+        if (prom && typeof prom.then === 'function') {
+            prom.finally(() => initVisible());
+        } else {
+            initVisible();
+        }
 
         // Trigger the fade-out
         overlay.classList.add('fade-out');
@@ -27,132 +89,158 @@ window.onload = () => {
     });
 };
 
-function paginateTable(tableId, pageSize) {
-    const mode = document.querySelector(`#${tableId}-playcount`).style.display !== 'none' ? 'playcount' : 'playtime';
-    const visibleTable = document.querySelector(`#${tableId}-${mode} table`);
-    const tbody = visibleTable.querySelector("tbody");
-    const searchInput = document.getElementById(`${tableId}-search`);
-    const cacheKey = `${tableId}-${mode}`;
-
-    if (!originalRowCache[cacheKey]) {
-        originalRowCache[cacheKey] = Array.from(tbody.querySelectorAll("tr")).map(tr => tr.cloneNode(true));
+// Ensure a lazily-loaded year section has its table skeletons
+function ensureYearSection(year) {
+    if (year === 'all') return; // 'All' is server-rendered
+    const section = document.getElementById(`year-${year}`);
+    if (!section) return;
+    if (section.__initialized) return;
+    // If already has children, assume initialized
+    if (section.children && section.children.length > 0) {
+        section.__initialized = true;
+        return;
     }
+    const blocks = [
+        {base: 'artist-table', title: 'Artists'},
+        {base: 'track-table', title: 'Tracks'},
+        {base: 'album-table', title: 'Albums'}
+    ];
+    let html = '';
+    blocks.forEach(({base, title}) => {
+        const tableId = `${base}-${year}`;
+        html += `
+    <h2>${title}</h2>
+    <input type="text" id="${tableId}-search" placeholder="Search for ${title}..." class="search-input" />
+    <div id="${tableId}-container">
+        <table data-title="${title}">
+            <thead><tr><th>Rank</th><th>${title}</th><th id="${tableId}-metric-label">Playtime</th></tr></thead>
+            <tbody id="${tableId}-tbody"></tbody>
+        </table>
+    </div>
+    <div class="pagination" id="${tableId}-nav"></div>`;
+    });
+    section.innerHTML = html;
+    section.__initialized = true;
+}
 
-    const originalRows = originalRowCache[cacheKey];
-    let filteredRows = [...originalRows];
+function paginateTable(tableId, pageSize) {
+    const isPlaytime = document.getElementById('global-mode-toggle')?.checked;
+    const tbody = document.getElementById(`${tableId}-tbody`);
+    const metricLabel = document.getElementById(`${tableId}-metric-label`);
+    const searchInput = document.getElementById(`${tableId}-search`);
+    const prefix = tableId.replace(/-(?:\d{4}|all)$/,'');
+    const root = getTableRoot();
+    const namesArr = root.names; // may be null in legacy format
+    const rawRows = (root.tables && root.tables[tableId]) ? root.tables[tableId] : [];
+
+    if (!tbody) return;
+    if (metricLabel) metricLabel.textContent = isPlaytime ? 'Playtime' : 'Plays';
+
+    // Sort by current mode desc
+    const sortedIdx = Array.from({length: rawRows.length}, (_, i) => i).sort((ia, ib) => {
+        const a = rawRows[ia], b = rawRows[ib];
+        const va = isPlaytime ? a[1] : a[2];
+        const vb = isPlaytime ? b[1] : b[2];
+        return vb - va;
+    });
+
+    const term = (searchTerms[prefix] ?? searchInput?.value ?? '').toLowerCase();
+    const filteredIdx = term
+        ? sortedIdx.filter(i => {
+            const row = rawRows[i];
+            const n = row && row.length ? row[0] : '';
+            const nameStr = (namesArr && typeof n === 'number') ? (namesArr[n] || '') : (n || '');
+            return nameStr.toLowerCase().includes(term);
+        })
+        : sortedIdx;
+
     let currentPage = 1;
 
-    function renderPage(page) {
+    function renderPage(page){
         currentPage = page;
         const start = (page - 1) * pageSize;
         const end = page * pageSize;
         const frag = document.createDocumentFragment();
 
-        filteredRows.slice(start, end).forEach(tr => {
-            frag.appendChild(tr.cloneNode(true));
-        });
+        const sliceIdx = filteredIdx.slice(start, end);
+        if (sliceIdx.length === 0) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 3;
+            td.style.height = '300px';
+            td.style.textAlign = 'center';
+            td.textContent = 'No results found.';
+            tr.appendChild(td);
+            frag.appendChild(tr);
+        } else {
+            sliceIdx.forEach((ri, idx) => {
+                const row = rawRows[ri] || [];
+                const n = row[0];
+                const pt = row[1] || 0;
+                const pc = row[2] || 0;
+                const name = (namesArr && typeof n === 'number') ? (namesArr[n] || '') : (n || '');
+                const tr = document.createElement('tr');
+                const tdRank = document.createElement('td');
+                const tdName = document.createElement('td');
+                const tdVal = document.createElement('td');
+                tdRank.textContent = String(start + idx + 1);
+                if (term) {
+                    const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                    tdName.innerHTML = name.replace(re, '<span class="highlight">$1</span>');
+                } else {
+                    tdName.textContent = name;
+                }
+                tdVal.textContent = isPlaytime ? formatMs(pt) : String(pc);
+                tr.appendChild(tdRank);
+                tr.appendChild(tdName);
+                tr.appendChild(tdVal);
+                frag.appendChild(tr);
+            });
+        }
 
-        tbody.innerHTML = "";
+        tbody.innerHTML = '';
         tbody.appendChild(frag);
-
         requestAnimationFrame(renderPagination);
-
-        const term = searchInput.value;
-        const prefix = tableId.replace(/-(?:\d{4}|all)$/, '');
-        searchTerms[prefix] = term;       // save it
-        highlightVisibleMatches(term);
     }
 
-    function renderPagination() {
-        const totalPages = Math.ceil(filteredRows.length / pageSize);
+    function renderPagination(){
+        const totalPages = Math.max(1, Math.ceil(filteredIdx.length / pageSize));
         const nav = document.getElementById(`${tableId}-nav`);
-        nav.innerHTML = "";
-
-        function createButton(label, page, active = false, disabled = false) {
-            const btn = document.createElement("button");
+        if (!nav) return;
+        nav.innerHTML = '';
+        function createButton(label, page, active=false, disabled=false){
+            const btn = document.createElement('button');
             btn.textContent = label;
-            if (active) btn.classList.add("active");
+            if (active) btn.classList.add('active');
             if (disabled) btn.disabled = true;
             btn.onclick = () => renderPage(page);
             nav.appendChild(btn);
         }
-
-        createButton("Prev", currentPage - 1, false, currentPage === 1);
-
+        createButton('Prev', currentPage - 1, false, currentPage === 1);
         const pageWindow = 1;
         const startPage = Math.max(1, currentPage - pageWindow);
         const endPage = Math.min(totalPages, currentPage + pageWindow);
-
         if (startPage > 1) {
-            createButton("1", 1);
-            if (startPage > 2) nav.appendChild(document.createTextNode("..."));
+            createButton('1', 1);
+            if (startPage > 2) nav.appendChild(document.createTextNode('...'));
         }
-
-        for (let i = startPage; i <= endPage; i++) {
-            createButton(i, i, i === currentPage);
-        }
-
+        for (let i = startPage; i <= endPage; i++) createButton(String(i), i, i === currentPage);
         if (endPage < totalPages) {
-            if (endPage < totalPages - 1) nav.appendChild(document.createTextNode("..."));
-            createButton(totalPages, totalPages);
+            if (endPage < totalPages - 1) nav.appendChild(document.createTextNode('...'));
+            createButton(String(totalPages), totalPages);
         }
-
-        createButton("Next", currentPage + 1, false, currentPage === totalPages);
+        createButton('Next', currentPage + 1, false, currentPage === totalPages);
     }
 
-    function applySearch(term) {
-        const lowerTerm = term.toLowerCase();
-
-        filteredRows = originalRows.filter(tr =>
-            tr.textContent.toLowerCase().includes(lowerTerm)
-        );
-
-        if (filteredRows.length === 0) {
-            const colCount = originalRows[0]?.children.length || 1;
-            const noResultsRow = document.createElement("tr");
-            const td = document.createElement("td");
-            td.style.height = "300px";
-            td.colSpan = colCount;
-            td.textContent = "No results found.";
-            td.style.textAlign = "center";
-            noResultsRow.appendChild(td);
-            filteredRows = [noResultsRow];
-        }
-
-        renderPage(1);
-
-        // Highlight matches only if there are results
-        if (filteredRows.length > 0 && filteredRows[0].textContent !== "No results found.") {
-            highlightVisibleMatches(term);
-        }
-    }
-
-    function highlightVisibleMatches(term) {
-        if (!term) return;
-
-        const regex = new RegExp(`(${term})`, "gi");
-        const tbody = document.querySelector(`#${tableId}-${mode} table tbody`);
-        const rows = tbody.querySelectorAll("tr");
-
-        rows.forEach(row => {
-            row.querySelectorAll("td").forEach(cell => {
-                const originalText = cell.textContent;
-                cell.innerHTML = originalText.replace(regex, `<span class="highlight">$1</span>`);
-            });
+    if (searchInput && !searchInput.__wired) {
+        searchInput.__wired = true;
+        searchInput.addEventListener('input', () => {
+            searchTerms[prefix] = searchInput.value;
+            renderPage(1);
         });
     }
 
-    if (searchInput) {
-        // derive a “prefix” like "artist-table" or "track-table" (drops "-2023" or "-all")
-        const prefix = tableId.replace(/-(?:\d{4}|all)$/, '');
-        searchInput.addEventListener("input", () => {
-            const term = searchInput.value;
-            searchTerms[prefix] = term;       // save it
-            applySearch(term);
-        });
-    }
-
-    renderPage(currentPage);
+    renderPage(1);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -235,12 +323,14 @@ document.addEventListener("DOMContentLoaded", () => {
     modeToggle.addEventListener("change", () => {
         const newMode = modeToggle.checked ? "playtime" : "playcount";
 
-        document.querySelectorAll('.year-section').forEach(sec => {
-            const yr = sec.id.split('-')[1];          // e.g. "all", "2023", etc.
+        // Re-render only the currently visible section's tables in the new mode
+        const visible = Array.from(document.querySelectorAll('.year-section')).find(sec => sec.style.display !== 'none');
+        if (visible) {
+            const yr = visible.id.split('-')[1];
             ["artist-table", "track-table", "album-table"].forEach(base => {
-                switchMode(`${base}-${yr}`, newMode);
+                paginateTable(`${base}-${yr}`, itemsPerPage);
             });
-        });
+        }
 
         modeToggleText.textContent = modeToggle.checked
             ? "Switch to Playcount:"
@@ -271,17 +361,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 function switchMode(tableId, mode) {
-    const playcountDiv = document.getElementById(`${tableId}-playcount`);
-    const playtimeDiv = document.getElementById(`${tableId}-playtime`);
-
-    if (mode === 'playcount') {
-        playcountDiv.style.display = 'block';
-        playtimeDiv.style.display = 'none';
-    } else {
-        playcountDiv.style.display = 'none';
-        playtimeDiv.style.display = 'block';
-    }
-
+    // Data-first rendering: simply re-render the table for the given id
     paginateTable(tableId, itemsPerPage);
 }
 
@@ -417,6 +497,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const y = tab.dataset.year;
         const section = document.getElementById(`year-${y}`);
+        // Ensure lazy section has its skeleton before showing and paginating
+        ensureYearSection(y);
         section.style.display = 'block';
         section.setAttribute('aria-hidden', 'false');
 
@@ -424,6 +506,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (yearSelect && yearSelect.value !== y) {
             yearSelect.value = y;
         }
+
+        // Ensure tables in this section are initialized/rendered for current mode
+        ['artist-table','track-table','album-table'].forEach(base => {
+            paginateTable(`${base}-${y}`, itemsPerPage);
+        });
 
         // restore any saved searches in this section
         section.querySelectorAll('.search-input').forEach(input => {

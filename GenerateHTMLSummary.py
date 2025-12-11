@@ -12,12 +12,12 @@ from typing import Any
 from gui import *
 from data_processing import load_spotify_data, process_spotify_data, aggregate_yearly_data
 from html_generation import build_year_tabs, build_year_dropdown, build_all_section, build_year_sections, build_stats_html, \
-    generate_html_content, write_html_to_file, generate_personality_html
+    generate_html_content, write_html_to_file, generate_personality_html, build_tables_data
 from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.16.2"
+VERSION = "1.17.0"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments
@@ -133,9 +133,10 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
             tabs = build_year_tabs(years)
             year_dropdown = build_year_dropdown(years)
             all_section = build_all_section(all_data)
-            year_sections = build_year_sections(years, yearly)
+            year_sections = build_year_sections(years)
             sections = all_section + year_sections
             stats_html = build_stats_html(stats_data, daily_counts, otd_data, yearly)
+            table_data = build_tables_data(all_data, yearly)
         except Exception as e:
             logging.error(f"Error building HTML content: {e}")
             log_exception()
@@ -148,7 +149,7 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
         update_progress("Generating HTML", 0.8)
         try:
             html_content = generate_html_content(
-                tabs, sections, stats_html, GITHUB_URL, VERSION, personality_html, year_dropdown
+                tabs, sections, stats_html, GITHUB_URL, VERSION, personality_html, year_dropdown, table_data
             )
         except Exception as e:
             logging.error(f"Error generating HTML content: {e}")

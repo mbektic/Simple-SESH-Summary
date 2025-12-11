@@ -49,6 +49,7 @@ th, td {
 tr th:first-of-type,
 tr td:first-of-type {
     width: 10%;
+    text-align: center;
 }
 
 tr th:nth-of-type(2),
@@ -325,7 +326,7 @@ a, a:visited {
 }
 
 .stats-group h3 {
-    margin-top: 0;
+    margin-top: 4px;
     font-size: 1.2rem;
     border-bottom: 2px solid #1DB954;
     padding-bottom: 0.3em;
@@ -682,7 +683,6 @@ a, a:visited {
     width: 150px;
     text-align: right;
     padding-right: 10px;
-    font-weight: bold;
 }
 
 
@@ -690,7 +690,6 @@ a, a:visited {
     flex-grow: 1;
     display: flex;
     align-items: center;
-    background-color: #f0f0f0;
     border-radius: 4px;
     overflow: hidden;
     height: 20px;
@@ -710,8 +709,7 @@ a, a:visited {
 
 .personality-percentage {
     margin-left: 10px;
-    font-weight: bold;
-    color: #333;
+    color: #222222;
     position: absolute;
 }
 
@@ -720,8 +718,16 @@ a, a:visited {
 *****************************/
 /* Responsive swap: show dropdown on small screens, hide tabs */
 @media only screen and (max-width: 1024px) {
+    h2 {
+        padding: 0 5%;
+    }
+
     #year-tabs {
         display: none;
+    }
+
+    .yb-hbar.yb-bar {
+        height: 2em;
     }
 
     .year-dropdown {
@@ -927,7 +933,7 @@ a, a:visited {
 
     #stats button,
     #otd-date {
-        font-size: 1em;
+        font-size: 1.1em;
     }
 
     #otd-pagination button,
@@ -978,7 +984,6 @@ a, a:visited {
         font-size: 1.05rem;
     }
 
-    /* Yearly chart (horizontal): slightly larger bars on very small phones */
     .yb-hbar.yb-bar {
         height: 1.65em;
     }

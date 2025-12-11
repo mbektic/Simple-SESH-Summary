@@ -42,6 +42,11 @@ What gets filtered:
 - All processing steps ignore entries whose timestamp year is less than `MIN_YEAR`.
 - This applies to all statistics and also to the "On This Day" section.
 
+### Compression (if you run into an issue with the generated HTML file)
+In `config.py` there is a flag set `COMPRESS_TABLE_DATA = True`.
+If you are experiencing issues with the generated HTML file, you can try setting this to `False`.
+
+
 
 ## IMPORTANT NOTES
 - When you first open the HTML page, it can take a few seconds to load depending on how many years of history you have.
