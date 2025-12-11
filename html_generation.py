@@ -129,7 +129,6 @@ def build_table(title: str, playtime_counts: Dict[str, int], playcount_counts: D
     Returns:
         str: HTML table as a string
     """
-    clean_title = title[2:]  # Remove emoji
     mode_string_playtime = "Playtime"
     mode_string_playcount = "Plays"
 
@@ -149,18 +148,18 @@ def build_table(title: str, playtime_counts: Dict[str, int], playcount_counts: D
 
     return f"""
     <h2>{title}</h2>
-    <input type="text" id="{table_id}-search" placeholder="Search for {clean_title}..." class="search-input" />
+    <input type="text" id="{table_id}-search" placeholder="Search for {title}..." class="search-input" />
 
     <div id="{table_id}-playcount" style="display: none;">
         <table>
-            <thead><tr><th>Rank</th><th>{clean_title}</th><th>{mode_string_playcount}</th></tr></thead>
+            <thead><tr><th>Rank</th><th>{title}</th><th>{mode_string_playcount}</th></tr></thead>
             <tbody>{playcount_rows}</tbody>
         </table>
     </div>
 
     <div id="{table_id}-playtime">
         <table>
-            <thead><tr><th>Rank</th><th>{clean_title}</th><th>{mode_string_playtime}</th></tr></thead>
+            <thead><tr><th>Rank</th><th>{title}</th><th>{mode_string_playtime}</th></tr></thead>
             <tbody>{playtime_rows}</tbody>
         </table>
     </div>
@@ -183,6 +182,25 @@ def build_year_tabs(years: List[int]) -> str:
         f'<button class="year-tab" data-year="{yr}" role="tab" aria-selected="false" aria-controls="year-{yr}">{yr}</button>'
         for yr in years
     )
+
+
+def build_year_dropdown(years: List[int]) -> str:
+    """
+    Build a mobile-friendly labeled dropdown for year selection.
+
+    Args:
+        years (List[int]): List of years
+
+    Returns:
+        str: HTML for a labeled <select> that mirrors the year tabs
+    """
+    options = '<option value="all" selected>All</option>' + "".join(
+        f'<option value="{yr}">{yr}</option>' for yr in years
+    )
+    return f'''<div id="year-dropdown" class="year-dropdown" aria-label="Year selection">
+  <label for="year-select" class="year-select-label">Year</label>
+  <select id="year-select" class="year-select">{options}</select>
+</div>'''
 
 
 def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
@@ -224,13 +242,13 @@ def build_year_sections(years: List[int], yearly: DefaultDict[int, Dict[str, Def
     for yr in years:
         style = "none"
         sections += f'<div class="year-section" id="year-{yr}" style="display: {style};">'
-        sections += build_table("🎤 Artists",
+        sections += build_table("Artists",
                                 yearly[yr]["artist_time"], yearly[yr]["artist_counts"],
                                 f"artist-table-{yr}")
-        sections += build_table("🎶 Tracks",
+        sections += build_table("Tracks",
                                 yearly[yr]["track_time"], yearly[yr]["track_counts"],
                                 f"track-table-{yr}")
-        sections += build_table("💿 Albums",
+        sections += build_table("Albums",
                                 yearly[yr]["album_time"], yearly[yr]["album_counts"],
                                 f"album-table-{yr}")
         sections += "</div>"
@@ -529,7 +547,7 @@ def generate_personality_html(stats_data: Dict[str, Any]) -> str:
 
 
 def generate_html_content(tabs: str, sections: str, stats_html: str, github_url: str, version: str,
-                          personality_html: str) -> str:
+                          personality_html: str, year_dropdown: str = "") -> str:
     """
     Generate the complete HTML content for the summary report.
 
@@ -557,6 +575,7 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
     <body style='overflow: hidden;'>
         {print_file("html/title_bar.html")}
         <div id="year-tabs">{tabs}</div>
+        {year_dropdown}
         {sections}
         {personality_html}
         {stats_html}

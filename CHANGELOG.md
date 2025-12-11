@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] 2025-12-10
+### Changed
+- The year selector is now a dropdown instead of a tab menu on mobile.
+- A lot more appearance improvements.
+
+### Fixed
+- Removed the emojis for real this time. 
+- Fixed placeholder text for search bars. Was broken when I removed the Emojis.
+- Fixed default config.json settings. 
+
 ## [1.16.1] 2025-12-10
 ### Changed
 - Removed the emojis since they were kinda cringy.

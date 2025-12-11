@@ -8,17 +8,17 @@ MIN_MILLISECONDS = 20000
 
 # Optional minimum year filter. If set (e.g., 2020), data before that year will be ignored.
 # Set to None to disable year filtering.
-MIN_YEAR = None
+MIN_YEAR = 2022
 
 
 # Directory, or folder, on your computer where your Spotify JSON files are located.
 #     The easiest method is to just put them in the sesh folder.
-INPUT_DIR = "sesh/tmp"
+INPUT_DIR = ""
 
 
 # Name/path of the output file. If you don't change this, it will be in the same folder
 #     as this script with the name summary.html. No need to add the .html
-OUTPUT_FILE = "o"
+OUTPUT_FILE = "summary"
 
 
 def validate_config():

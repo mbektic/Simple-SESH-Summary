@@ -5,7 +5,7 @@ Example page [mbektic.com/SESH](https://mbektic.com/SESH/)
 
 ## Before you start
  - If you want to get a copy of your Spotify extended streaming history, you can get it [HERE](https://www.spotify.com/us/account/privacy/)
- - I wrote this using python 3.11.6, but any recent version of python _should_ work.
+ - I wrote this using python 3.13.5, but any recent version of python _should_ work.
 
 
 ## Running
@@ -51,7 +51,11 @@ What gets filtered:
 
 ## Images
 ### Year Selector
-![Image](https://github.com/user-attachments/assets/0fa47626-5256-4a3e-a7cb-423226da9878)
+This will filter the tables based on the year selected.
+#### Desktop
+![Image](https://github.com/user-attachments/assets/69f56d14-c3d9-4f08-a684-ad8b0e87d5b1)
+#### Mobile
+![Image](https://github.com/user-attachments/assets/f3b2b1fa-f7f0-4479-a888-46783e4a38c3)
 
 ### Artist (Dark Mode and Play Time)
 ![Image](https://github.com/user-attachments/assets/a2b84762-d564-44f0-90c4-3235670fb64a)

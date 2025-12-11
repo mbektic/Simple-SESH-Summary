@@ -400,6 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // year-tab click handler
     const yearTabs = document.querySelectorAll('.year-tab');
+    const yearSelect = document.getElementById('year-select');
 
     // Function to activate a tab
     function activateTab(tab) {
@@ -418,6 +419,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const section = document.getElementById(`year-${y}`);
         section.style.display = 'block';
         section.setAttribute('aria-hidden', 'false');
+
+        // sync dropdown if present
+        if (yearSelect && yearSelect.value !== y) {
+            yearSelect.value = y;
+        }
 
         // restore any saved searches in this section
         section.querySelectorAll('.search-input').forEach(input => {
@@ -488,6 +494,23 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
     });
+
+    // Wire up year dropdown (mobile)
+    if (yearSelect) {
+        // initialize value from active tab
+        const activeTab = document.querySelector('.year-tab.active');
+        if (activeTab) {
+            yearSelect.value = activeTab.dataset.year;
+        }
+
+        yearSelect.addEventListener('change', () => {
+            const val = yearSelect.value;
+            const targetTab = document.querySelector(`.year-tab[data-year="${val}"]`);
+            if (targetTab) {
+                activateTab(targetTab);
+            }
+        });
+    }
 
     // Initialize tooltips for info buttons
     tippy('.info-button', {
