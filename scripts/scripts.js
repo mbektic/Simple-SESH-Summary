@@ -99,6 +99,14 @@ function getPlaylistsData() {
     }
 }
 
+function setPlaylistsData(obj){
+    try{
+        __PLAYLISTS_DATA_CACHE = obj || null;
+        const el = document.getElementById('smart-playlists');
+        if (el && obj) el.textContent = JSON.stringify(obj);
+    }catch(e){ console.error('Failed to set playlists data', e); }
+}
+
 function getTrackUriMap() {
     if (__TRACK_URI_MAP) return __TRACK_URI_MAP;
     __TRACK_URI_MAP = {};
@@ -1027,4 +1035,134 @@ document.addEventListener("DOMContentLoaded", () => {
         theme: 'spotify',
         maxWidth: '50em'
     });
+
+    // ---------- Smart Playlists UI + Seasonal Echoes (moved from inline) ----------
+    (function(){
+        const openBtn = document.getElementById('open-playlists-btn');
+        const modalEl = document.getElementById('smart-playlists-modal');
+        if(!openBtn || !modalEl) return;
+
+        // Build a Spotify link for an item
+        function spotifyLinkFor(item){
+            const uri = (item && item.uri) || '';
+            if (uri && uri.startsWith('spotify:track:')){
+                const id = uri.split(':').pop();
+                return 'https://open.spotify.com/track/' + encodeURIComponent(id);
+            }
+            if (/^https?:\/\//i.test(uri)) return uri;
+            const q = (item.track||'') + ' ' + (item.artist||'');
+            return 'https://open.spotify.com/search/' + encodeURIComponent(q.trim());
+        }
+
+        // Render the left list and right detail pane
+        function renderSmartPlaylists(){
+            const data = getPlaylistsData();
+            const listEl = document.getElementById('playlists-list');
+            const detail = document.getElementById('playlist-detail');
+            if(!data || !data.playlists || !listEl || !detail) return;
+            listEl.innerHTML = '';
+            data.playlists.forEach((pl)=>{
+                const li = document.createElement('li');
+                const btn = document.createElement('button');
+                btn.className = 'btn stats-button';
+                btn.style = 'width:90%; text-align:left; margin:6px 0;';
+                const count = (pl.items||[]).length;
+                btn.textContent = pl.name + (count? (' ('+count+')') : '');
+                btn.addEventListener('click', ()=>{
+                    let html = '';
+                    html += '<h3 style="margin:0 0 8px 0;">'+ (pl.name||'') +'</h3>';
+                    if (pl.description){ html += '<p style="opacity:.9;">'+ pl.description +'</p>'; }
+                    if (!pl.items || pl.items.length===0){ html += '<p>No tracks in this playlist.</p>'; detail.innerHTML = html; return; }
+                    html += '<ol style="padding-left:18px;">';
+                    pl.items.forEach((it)=>{
+                        const url = spotifyLinkFor(it);
+                        const label = (it.track||'Unknown Track') + ' — ' + (it.artist||'Unknown Artist');
+                        const sub = it.album ? ('<span style="opacity:.8"> ('+ it.album +')</span>') : '';
+                        html += '<li style="margin:6px 0;"><a href="'+url+'" target="_blank" rel="noopener noreferrer">'+ label +'</a>'+ sub +'</li>';
+                    });
+                    html += '</ol>';
+                    detail.innerHTML = html;
+                });
+                li.appendChild(btn);
+                listEl.appendChild(li);
+            });
+        }
+
+        // Seasonal Echoes generation from compact daily table data
+        const SE_MAX = (function(){ try{ return (window.SMART_PLAYLISTS_MAX_TRACKS||50)|0; }catch(e){ return 50; }})();
+        function parseNameToTrackArtist(name){
+            if (typeof name !== 'string') return {track: String(name||''), artist: ''};
+            let parts = name.split(' — '); if(parts.length<2) parts = name.split(' - ');
+            if (parts.length>=2) return {track: parts[0].trim(), artist: parts.slice(1).join(' - ').trim()};
+            return {track: name, artist: ''};
+        }
+        function generateSeasonalEchoesFromTable(table){
+            try{
+                if(!table || !table.daily || !table.names) return null;
+                const names = table.names||[]; const uris = table.uris||[];
+                const now = new Date(); const currentMonth = now.getMonth()+1;
+                const acc = Object.create(null); const daily = table.daily;
+                for (const dateKey in daily){ if(!Object.prototype.hasOwnProperty.call(daily, dateKey)) continue;
+                    let mm = 0; try{ mm = parseInt(dateKey.slice(5,7),10)||0; }catch(e){}
+                    if (mm !== currentMonth) continue;
+                    const grp = daily[dateKey]; const rows = grp && grp.track; if(!rows) continue;
+                    for (let i=0;i<rows.length;i++){
+                        const r = rows[i]; const idx = r[0]|0; const pt = r[1]|0; const pc = r[2]|0;
+                        let o = acc[idx]; if(!o){ o = acc[idx] = {ms:0, plays:0}; }
+                        o.ms += pt; o.plays += pc;
+                    }
+                }
+                const scored = [];
+                for (const k in acc){ if(!Object.prototype.hasOwnProperty.call(acc,k)) continue;
+                    const o = acc[k];
+                    if (o.plays>=2 || o.ms>=120000){
+                        const score = o.ms + 30000*Math.max(0, o.plays-1);
+                        scored.push({idx:(k|0), score, ms:o.ms});
+                    }
+                }
+                scored.sort((a,b)=> b.score-a.score);
+                const monthName = now.toLocaleString(undefined,{month:'long'});
+                const items = [];
+                for (let s=0; s<scored.length && items.length<SE_MAX; s++){
+                    const idx = scored[s].idx; const nm = names[idx]||''; const ta = parseNameToTrackArtist(nm);
+                    const uri = (Array.isArray(uris) && uris[idx]) ? uris[idx] : '';
+                    items.push({ track: ta.track||nm||'Unknown Track', artist: ta.artist||'', album: '', uri: uri, ms_played_sample: scored[s].ms, why: 'A '+monthName+' favorite across years' });
+                }
+                return { name:'Seasonal Echoes', description:'Tracks you gravitate to this month across the years.', items };
+            }catch(e){ console.warn('Seasonal Echoes generation error', e); return null; }
+        }
+        function insertOrReplaceSeasonal(plData, seasonal){
+            if(!plData || !seasonal) return plData;
+            const arr = Array.isArray(plData.playlists) ? plData.playlists : [];
+            let found = false;
+            for (let i=0;i<arr.length;i++){
+                if (String(arr[i].name||'').toLowerCase() === 'seasonal echoes'){ arr[i] = seasonal; found = true; break; }
+            }
+            if (!found) arr.push(seasonal);
+            try { arr.sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), undefined, {sensitivity:'base'})); } catch(e){}
+            plData.playlists = arr; return plData;
+        }
+        function refreshSeasonalEchoes(){
+            const table = getTableData();
+            if (!table) return; // will be retried on button click if needed
+            const seasonal = generateSeasonalEchoesFromTable(table);
+            if (!seasonal) return;
+            const data = getPlaylistsData();
+            if (!data) return;
+            const updated = insertOrReplaceSeasonal(data, seasonal);
+            setPlaylistsData(updated);
+        }
+
+        // Compute on load (best-effort; compressed path may complete slightly later)
+        try {
+            if (window.__TABLE_DATA_PROM){ window.__TABLE_DATA_PROM.then(()=> refreshSeasonalEchoes()); } else { refreshSeasonalEchoes(); }
+        } catch(e) { /* no-op */ }
+
+        openBtn.addEventListener('click', ()=>{
+            // refresh just-in-time
+            try { refreshSeasonalEchoes(); } catch(e){}
+            try { renderSmartPlaylists(); } catch(e){}
+            openModal(modalEl, openBtn);
+        });
+    })();
 });

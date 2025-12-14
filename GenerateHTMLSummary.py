@@ -15,10 +15,10 @@ from html_generation import build_year_tabs, build_year_dropdown, build_all_sect
     generate_html_content, write_html_to_file, generate_personality_html, build_tables_data
 from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
-from smart_playlists import generate_smart_playlists, write_playlists_to_file
+from smart_playlists import generate_smart_playlists
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.9.1"
+VERSION = "1.9.2"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments
@@ -89,6 +89,25 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
             logging.error(f"Error loading Spotify data: {e}")
             log_exception()
             raise
+
+        # Globally filter out fully-unknown items so they don't appear anywhere
+        # Unknown triple: "Unknown Track" — "Unknown Artist" ("Unknown Album")
+        try:
+            before_count = len(entries)
+            filtered = []
+            for _e in entries:
+                artist = _e.get("master_metadata_album_artist_name") or _e.get("artist_name") or "Unknown Artist"
+                track = _e.get("master_metadata_track_name") or _e.get("track_name") or "Unknown Track"
+                album = _e.get("master_metadata_album_album_name") or _e.get("album_name") or "Unknown Album"
+                if not (track == "Unknown Track" and artist == "Unknown Artist" and album == "Unknown Album"):
+                    filtered.append(_e)
+            removed = before_count - len(filtered)
+            if removed > 0:
+                logging.info(f"Filtered out {removed} fully-unknown entries from dataset")
+            entries = filtered
+        except Exception:
+            # Be resilient; if anything goes wrong, proceed without filtering rather than failing.
+            pass
 
         # Process Spotify data
         update_progress("Processing data", 0.3)

@@ -97,7 +97,26 @@ def generate_smart_playlists(raw_entries: List[Dict[str, Any]], max_tracks: int 
         artist_ms = _artist_play_counts(entries)
 
         # Index by track key for stats
-        per_track: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"plays": 0, "ms": 0, "skips": 0, "sample": None})
+        per_track: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+            "plays": 0,
+            "ms": 0,
+            "skips": 0,
+            "sample": None,
+            "first_ts": None,
+            "last_ts": None,
+            # For City Skyline Shuffle
+            "commute_days": set(),  # set[str YYYY-MM-DD]
+            # For Late-Bloomers
+            "quarter_counts": defaultdict(int),  # key: (year, q)
+        })
+        # For recent vs past comparisons
+        now_global = max((e.get("ts") for e in entries if e.get("ts")), default=datetime.utcnow())
+        last_30_cutoff = now_global - timedelta(days=30)
+        last_60_cutoff = now_global - timedelta(days=60)
+        last_90_cutoff = now_global - timedelta(days=90)
+        last_120_cutoff = now_global - timedelta(days=120)
+        per_track_recent_30: Dict[str, int] = defaultdict(int)
+        per_track_past_before_30: Dict[str, int] = defaultdict(int)
         for e in entries:
             key = e.get("uri") or (e.get("track") + "|" + e.get("artist"))
             d = per_track[key]
@@ -107,6 +126,27 @@ def generate_smart_playlists(raw_entries: List[Dict[str, Any]], max_tracks: int 
                 d["skips"] += 1
             if not d["sample"] or e.get("ms", 0) > d["sample"].get("ms", 0):
                 d["sample"] = e
+            ts = e.get("ts")
+            if ts:
+                d["first_ts"] = min(d["first_ts"], ts) if d["first_ts"] else ts
+                d["last_ts"] = max(d["last_ts"], ts) if d["last_ts"] else ts
+                # Commute windows (7–9am and 4–6pm local time)
+                try:
+                    if (7 <= ts.hour <= 9) or (16 <= ts.hour <= 18):
+                        d["commute_days"].add(ts.date().isoformat())
+                except Exception:
+                    pass
+                # Track per-quarter counts for Late-Bloomers
+                try:
+                    q = (ts.month - 1) // 3 + 1
+                    d["quarter_counts"][(ts.year, q)] += 1
+                except Exception:
+                    pass
+
+                if ts >= last_30_cutoff:
+                    per_track_recent_30[key] += 1
+                else:
+                    per_track_past_before_30[key] += 1
 
         # 1) Sunday Evening Wind‑down: Sunday 6pm–11:59pm, sort by average ms per play desc
         sunday_tracks: List[Dict[str, Any]] = []
@@ -211,7 +251,7 @@ def generate_smart_playlists(raw_entries: List[Dict[str, Any]], max_tracks: int 
         deep_cuts = _clip(_dedupe_keep_best(deep_cuts), max_tracks)
 
         # 5) New Artist Sampler: artists first heard in last 90 days
-        now = max((e["ts"] for e in entries if e.get("ts")), default=datetime.utcnow())
+        now = now_global
         cutoff = now - timedelta(days=90)
         artist_first_seen: Dict[str, datetime] = {}
         for e in entries:
@@ -245,6 +285,259 @@ def generate_smart_playlists(raw_entries: List[Dict[str, Any]], max_tracks: int 
         redemption.sort(key=lambda x: x[1], reverse=True)
         redemption_list = [t for t, _ in redemption]
         redemption_list = _clip(_dedupe_keep_best(redemption_list), max_tracks)
+
+        # 7) Morning Boost: tracks you tended to play in the morning (06:00-09:59)
+        morning: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats["sample"]
+            if not e or not e.get("ts"):
+                continue
+            dt = e["ts"]
+            if 6 <= dt.hour <= 9:
+                avg_ms = stats["ms"] / max(1, stats["plays"])
+                morning.append((_with_rationale(e, "Frequently played in the morning"), avg_ms))
+        morning.sort(key=lambda x: x[1], reverse=True)
+        morning_list = _clip(_dedupe_keep_best([t for t, _ in morning]), max_tracks)
+
+        # 8) Night Owl Mix: tracks you tended to play late night (00:00-03:59)
+        night: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats["sample"]
+            if not e or not e.get("ts"):
+                continue
+            dt = e["ts"]
+            if 0 <= dt.hour <= 3:
+                avg_ms = stats["ms"] / max(1, stats["plays"])
+                night.append((_with_rationale(e, "Your late-night vibe"), avg_ms))
+        night.sort(key=lambda x: x[1], reverse=True)
+        night_list = _clip(_dedupe_keep_best([t for t, _ in night]), max_tracks)
+
+        # 9) Weekend Bangers: tracks you played on the weekend (Sat/Sun)
+        weekend: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats["sample"]
+            if not e or not e.get("ts"):
+                continue
+            dt = e["ts"]
+            if dt.weekday() in (5, 6):  # Sat=5, Sun=6
+                score = stats["plays"] + stats["ms"] / 180000  # blend usage
+                weekend.append((_with_rationale(e, "A weekend favorite"), score))
+        weekend.sort(key=lambda x: x[1], reverse=True)
+        weekend_list = _clip(_dedupe_keep_best([t for t, _ in weekend]), max_tracks)
+
+        # 10) Weekday Flow: tracks you played on weekdays (Mon-Fri)
+        weekday: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats["sample"]
+            if not e or not e.get("ts"):
+                continue
+            dt = e["ts"]
+            if dt.weekday() in (0, 1, 2, 3, 4):
+                score = (stats["ms"] / max(1, stats["plays"]))
+                weekday.append((_with_rationale(e, "Your weekday go-to"), score))
+        weekday.sort(key=lambda x: x[1], reverse=True)
+        weekday_list = _clip(_dedupe_keep_best([t for t, _ in weekday]), max_tracks)
+
+        # 11) Forgotten Favorites: high historical use, not played recently (>=120 days)
+        forgotten: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            last_ts = stats.get("last_ts")
+            if last_ts and last_ts < last_120_cutoff and stats["ms"] >= 180000:  # 3+ min total
+                e = stats["sample"]
+                if e:
+                    forgotten.append((_with_rationale(e, "Loved before, not heard in a while"), stats["ms"]))
+        forgotten.sort(key=lambda x: x[1], reverse=True)
+        forgotten_list = _clip(_dedupe_keep_best([t for t, _ in forgotten]), max_tracks)
+
+        # 12) City Skyline Shuffle: commute-hour clustering across many different days
+        city_candidates: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats.get("sample")
+            if not e:
+                continue
+            days = len(stats.get("commute_days", set()))
+            if days < 2:
+                continue  # require appearances on multiple days
+            avg_ms = stats["ms"] / max(1, stats["plays"])
+            # Prefer medium-length engagement; exclude very long-form
+            if avg_ms < 90000 or avg_ms > 240000:
+                continue
+            # Score: favor more distinct days, slight preference toward ~2.5 min
+            score = days * 10 - abs(avg_ms - 150000) / 60000.0
+            city_candidates.append((_with_rationale(e, "A commute-time staple across days"), score))
+        city_candidates.sort(key=lambda x: x[1], reverse=True)
+        city_raw = [t for t, _ in city_candidates]
+        city_list: List[Dict[str, Any]] = []
+        per_artist_added_city: Dict[str, int] = defaultdict(int)
+        city_cap = 3
+        for item in city_raw:
+            artist = item.get("artist")
+            if per_artist_added_city[artist] >= city_cap:
+                continue
+            city_list.append(item)
+            per_artist_added_city[artist] += 1
+            if len(city_list) >= max_tracks:
+                break
+        city_list = _clip(_dedupe_keep_best(city_list), max_tracks)
+
+        # 13) Late‑Bloomers: slow-burn increase across quarters
+        late_candidates: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            e = stats.get("sample")
+            if not e:
+                continue
+            qc = stats.get("quarter_counts", {})
+            if not qc:
+                continue
+            # Sort quarters chronologically
+            series = sorted(qc.items(), key=lambda x: (x[0][0], x[0][1]))
+            counts = [c for (_k, c) in series]
+            if sum(counts) < 3 or len(counts) < 3:
+                continue
+            # Simple linear trend using last up to 6 quarters
+            tail = counts[-6:]
+            n = len(tail)
+            xs = list(range(n))
+            mean_x = sum(xs) / n
+            mean_y = sum(tail) / n
+            num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, tail))
+            den = sum((x - mean_x) ** 2 for x in xs) or 1.0
+            slope = num / den
+            # Require positive slope and the last quarter >= previous
+            if slope <= 0 or (n >= 2 and tail[-1] < tail[-2]):
+                continue
+            score = slope * (sum(tail))
+            late_candidates.append((_with_rationale(e, "A slow‑burn favorite rising over time"), score))
+        late_candidates.sort(key=lambda x: x[1], reverse=True)
+        late_raw = [t for t, _ in late_candidates]
+        late_list: List[Dict[str, Any]] = []
+        per_artist_added_late: Dict[str, int] = defaultdict(int)
+        late_cap = 3
+        for item in late_raw:
+            artist = item.get("artist")
+            if per_artist_added_late[artist] >= late_cap:
+                continue
+            late_list.append(item)
+            per_artist_added_late[artist] += 1
+            if len(late_list) >= max_tracks:
+                break
+        late_list = _clip(_dedupe_keep_best(late_list), max_tracks)
+
+        # 14) One‑Hit Wonder Gems: artists with exactly one track in your history
+        artist_track_keys: Dict[str, set] = defaultdict(set)
+        for key, stats in per_track.items():
+            e = stats["sample"]
+            if not e:
+                continue
+            artist_track_keys[e.get("artist")].add(key)
+        ohw: List[tuple[Dict[str, Any], float]] = []
+        for artist, keys in artist_track_keys.items():
+            if len(keys) == 1:
+                k = next(iter(keys))
+                s = per_track[k]
+                if s.get("sample"):
+                    ohw.append((_with_rationale(s["sample"], f"Only track from {artist} you listened to"), s["ms"]))
+        ohw.sort(key=lambda x: x[1], reverse=True)
+        one_hit_list = _clip(_dedupe_keep_best([t for t, _ in ohw]), max_tracks)
+
+        # 15) Zero‑Skip Keepers: many plays, zero skips
+        keepers: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            if stats["skips"] == 0 and stats["plays"] >= 3:
+                e = stats["sample"]
+                if e:
+                    keepers.append((_with_rationale(e, "Never skipped; always a keeper"), stats["ms"]))
+        keepers.sort(key=lambda x: x[1], reverse=True)
+        zero_skip_list = _clip(_dedupe_keep_best([t for t, _ in keepers]), max_tracks)
+
+        # 16) Quick Hits: short-and-sweet based on lower average ms per play
+        quick: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            avg_ms = stats["ms"] / max(1, stats["plays"])
+            if stats["plays"] >= 2 and avg_ms <= 120000:  # <= 2 minutes on average
+                e = stats["sample"]
+                if e:
+                    quick.append((_with_rationale(e, "Quick hit – bite‑sized plays"), avg_ms))
+        quick.sort(key=lambda x: x[1])  # shortest first
+        quick_hits_list = _clip(_dedupe_keep_best([t for t, _ in quick]), max_tracks)
+
+        # 17) Seasonal Echoes: tracks with a history of appearing in the current month (across years)
+        # Build per-track engagement that happened in the current calendar month (any year)
+        seasonal_scores: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"ms": 0, "plays": 0})
+        current_month = now_global.month
+        for e in entries:
+            ts = e.get("ts")
+            if not ts:
+                continue
+            if ts.month == current_month:
+                key = e.get("uri") or (e.get("track") + "|" + e.get("artist"))
+                s = seasonal_scores[key]
+                s["ms"] += e.get("ms", 0)
+                s["plays"] += 1
+        seasonal_rank: List[tuple[str, float]] = []
+        for key, s in seasonal_scores.items():
+            if s["plays"] >= 2 or s["ms"] >= 120000:  # at least some meaningful recurrence within this month across years
+                # score favors consistent engagement within this month
+                score = s["ms"] + 30000 * (s["plays"] - 1)
+                seasonal_rank.append((key, score))
+        seasonal_rank.sort(key=lambda x: x[1], reverse=True)
+        seasonal_list: List[Dict[str, Any]] = []
+        month_name = now_global.strftime("%B")
+        for key, _ in seasonal_rank:
+            e = per_track.get(key, {}).get("sample")
+            if e:
+                seasonal_list.append(_with_rationale(e, f"A {month_name} favorite across years"))
+            if len(seasonal_list) >= max_tracks:
+                break
+        seasonal_list = _clip(_dedupe_keep_best(seasonal_list), max_tracks)
+
+        # 17) Fresh Repeat Offenders: first heard in last 60 days, played 3+ times total
+        fresh_repeat: List[tuple[Dict[str, Any], float]] = []
+        for key, stats in per_track.items():
+            first_ts = stats.get("first_ts")
+            if first_ts and first_ts >= last_60_cutoff and stats["plays"] >= 3:
+                e = stats["sample"]
+                if e:
+                    fresh_repeat.append((_with_rationale(e, "New but already repeat‑worthy"), stats["plays"]))
+        fresh_repeat.sort(key=lambda x: x[1], reverse=True)
+        fresh_repeat_raw = [t for t, _ in fresh_repeat]
+        # Enforce per-artist cap of 5 to avoid concentration
+        fresh_repeat_list: List[Dict[str, Any]] = []
+        cap = 5
+        per_artist_added: Dict[str, int] = defaultdict(int)
+        for item in fresh_repeat_raw:
+            artist = item.get("artist")
+            if per_artist_added[artist] >= cap:
+                continue
+            fresh_repeat_list.append(item)
+            per_artist_added[artist] += 1
+            if len(fresh_repeat_list) >= max_tracks:
+                break
+        fresh_repeat_list = _clip(_dedupe_keep_best(fresh_repeat_list), max_tracks)
+
+        # 18) Artist Variety Sampler: one strong pick per many different artists
+        artist_best: List[tuple[Dict[str, Any], float]] = []
+        seen_artist: set = set()
+        # Rank keys by artist total ms, then pick each artist's top track
+        for artist, total_ms in artist_ms.most_common(100):
+            # find best sample for artist
+            best_e = None
+            best_score = -1.0
+            for key, stats in per_track.items():
+                e = stats["sample"]
+                if e and e.get("artist") == artist:
+                    score = stats["ms"]  # total engagement
+                    if score > best_score:
+                        best_score = score
+                        best_e = e
+            if best_e and artist not in seen_artist:
+                seen_artist.add(artist)
+                artist_best.append((_with_rationale(best_e, f"Representative pick from {artist}"), best_score))
+            if len(artist_best) >= max_tracks * 2:
+                break
+        # sort by artist strength but keep diversity
+        artist_best.sort(key=lambda x: x[1], reverse=True)
+        artist_variety_list = _clip(_dedupe_keep_best([t for t, _ in artist_best]), max_tracks)
 
         playlists = []
         if sunday_list:
@@ -280,18 +573,93 @@ def generate_smart_playlists(raw_entries: List[Dict[str, Any]], max_tracks: int 
                 "description": "Tracks you sometimes skipped but still gave a chance.",
                 "items": redemption_list,
             })
+        if morning_list:
+            playlists.append({
+                "name": "Morning Boost",
+                "description": "Your most morning‑friendly plays (6–10am).",
+                "items": morning_list,
+            })
+        if night_list:
+            playlists.append({
+                "name": "Night Owl Mix",
+                "description": "Late‑night listens between midnight and 4am.",
+                "items": night_list,
+            })
+        if weekend_list:
+            playlists.append({
+                "name": "Weekend Bangers",
+                "description": "Songs you gravitate to on Saturdays and Sundays.",
+                "items": weekend_list,
+            })
+        if weekday_list:
+            playlists.append({
+                "name": "Weekday Flow",
+                "description": "Reliable weekday companions for work or study.",
+                "items": weekday_list,
+            })
+        if forgotten_list:
+            playlists.append({
+                "name": "Forgotten Favorites",
+                "description": "Bring back tracks you loved but haven’t played lately.",
+                "items": forgotten_list,
+            })
+        if city_list:
+            playlists.append({
+                "name": "City Skyline Shuffle",
+                "description": "Commute‑hour staples across different days – mid‑length, easy flow.",
+                "items": city_list,
+            })
+        if late_list:
+            playlists.append({
+                "name": "Late‑Bloomers",
+                "description": "Slow‑burn risers across quarters – getting better with time.",
+                "items": late_list,
+            })
+        if one_hit_list:
+            playlists.append({
+                "name": "One‑Hit Wonder Gems",
+                "description": "Great songs from artists you only played once in your history.",
+                "items": one_hit_list,
+            })
+        if zero_skip_list:
+            playlists.append({
+                "name": "Zero‑Skip Keepers",
+                "description": "Often played and never skipped – certified keepers.",
+                "items": zero_skip_list,
+            })
+        if quick_hits_list:
+            playlists.append({
+                "name": "Quick Hits",
+                "description": "Short and snappy – quick listens you return to.",
+                "items": quick_hits_list,
+            })
+        if seasonal_list:
+            playlists.append({
+                "name": "Seasonal Echoes",
+                "description": "Tracks you gravitate to this month across the years.",
+                "items": seasonal_list,
+            })
+        if fresh_repeat_list:
+            playlists.append({
+                "name": "Fresh Repeat Offenders",
+                "description": "New discoveries you already replay a lot.",
+                "items": fresh_repeat_list,
+            })
+        if artist_variety_list:
+            playlists.append({
+                "name": "Artist Variety Sampler",
+                "description": "One strong pick from many of your favorite artists.",
+                "items": artist_variety_list,
+            })
+
+        # Sort playlists alphabetically by name before returning
+        try:
+            playlists.sort(key=lambda p: (p.get("name") or "").casefold())
+        except Exception:
+            # Fallback: simple string sort without casefold if any unexpected types
+            playlists.sort(key=lambda p: str(p.get("name") or ""))
 
         return {"generated_at": datetime.utcnow().isoformat() + "Z", "playlists": playlists}
     except Exception as e:
         logging.error(f"Error generating smart playlists: {e}")
         return {"playlists": []}
-
-
-def write_playlists_to_file(playlists: Dict[str, Any], output_json_path: str) -> None:
-    try:
-        with open(output_json_path, "w", encoding="utf-8") as f:
-            json.dump(playlists, f, ensure_ascii=False, indent=2)
-        logging.info(f"✅ Smart playlists exported: {output_json_path}")
-    except Exception as e:
-        logging.error(f"Failed to write smart playlists to {output_json_path}: {e}")
-        raise

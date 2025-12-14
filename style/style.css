@@ -1212,7 +1212,7 @@ body.modal-open {
     }
 
     #smart-playlists-modal .modal-sidebar {
-        flex: 1 0.8 auto;
+        flex: 1 0.9 auto;
         min-width: 0;
         border-right: none;
         border-bottom: 1px solid var(--border-color, #333);

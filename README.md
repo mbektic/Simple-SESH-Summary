@@ -93,7 +93,8 @@ You can also click on any track here to open it on Spotify.
 #### Listening By Year
 ![Image](https://github.com/user-attachments/assets/96da5c9c-930f-4649-b779-fcb2206db750)
 ### Smart Playlists
-![Image](https://github.com/user-attachments/assets/14bcb384-5663-46d6-b072-13859cb51662)
+You can also click on any track here to open it on Spotify.
+![Image](https://github.com/user-attachments/assets/09505297-bcd4-4df3-8088-995f8a77bc09)
 #### Heatmap
 ![Image](https://github.com/user-attachments/assets/169be638-f73d-48ea-9dfb-43dd055e9b31)
 
