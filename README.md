@@ -69,7 +69,8 @@ By selecting custom, you can select any date range for the tables.
 ![Image](https://github.com/user-attachments/assets/a2b84762-d564-44f0-90c4-3235670fb64a)
 
 ### Tracks (Light Mode and Play Count)
-![Image](https://github.com/user-attachments/assets/40cc2892-69db-4ca8-b669-429ac6042b0e)
+You can also click on any track here to open it on Spotify.
+![Image](https://github.com/user-attachments/assets/bbbd23b6-c7c8-4b19-b337-a13b8dc346fc)
 
 ### Albums (Search)
 ![Image](https://github.com/user-attachments/assets/1a9ba192-1fc5-4cc6-b115-a5f57ebef6db)
@@ -85,11 +86,14 @@ By selecting custom, you can select any date range for the tables.
 #### Patters/Session & Behavior
 ![Image](https://github.com/user-attachments/assets/ff73754e-2461-4261-9d91-f4af2a06c42e)
 #### On this day
+You can also click on any track here to open it on Spotify.
 ![Image](https://github.com/user-attachments/assets/84f50afd-3810-445c-9679-7686b589aa2b)
 #### Artist played every year
 ![Image](https://github.com/user-attachments/assets/bfa47186-ae50-4c73-a2b4-77e7fdf0b0db)
 #### Listening By Year
 ![Image](https://github.com/user-attachments/assets/96da5c9c-930f-4649-b779-fcb2206db750)
+### Smart Playlists
+![Image](https://github.com/user-attachments/assets/14bcb384-5663-46d6-b072-13859cb51662)
 #### Heatmap
 ![Image](https://github.com/user-attachments/assets/169be638-f73d-48ea-9dfb-43dd055e9b31)
 

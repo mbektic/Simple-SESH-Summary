@@ -45,7 +45,18 @@ function getTableRoot() {
     return { names: null, tables: (raw || {}) };
 }
 const searchTerms = {};
-let itemsPerPage = parseInt(localStorage.getItem("itemsPerPage"), 5) || 5;
+// Single source of truth helpers for items-per-page
+function getItemsPerPage(){
+    return parseInt(localStorage.getItem('itemsPerPage'), 10) || 5;
+}
+function setItemsPerPage(v){
+    const n = parseInt(v, 10);
+    if (Number.isFinite(n) && n > 0){
+        localStorage.setItem('itemsPerPage', String(n));
+        return n;
+    }
+    return getItemsPerPage();
+}
 
 function formatMs(ms){
     const sec = Math.floor(ms/1000);
@@ -190,7 +201,7 @@ window.onload = () => {
         if (visible) {
             const yr = visible.id.split('-')[1];
             ['artist-table','track-table','album-table'].forEach(base =>
-                paginateTable(`${base}-${yr}`, itemsPerPage)
+                paginateTable(`${base}-${yr}`, getItemsPerPage())
             );
         }
     }
@@ -392,7 +403,9 @@ function paginateTable(tableId, pageSize) {
             // Persist the term for this table family (artist-table / track-table / album-table)
             searchTerms[prefix] = searchInput.value;
             // Re-run pagination so the filtered index is recalculated with the new term
-            paginateTable(tableId, pageSize);
+            // Use the latest items-per-page value from storage instead of the
+            // stale pageSize captured when the listener was first registered.
+            paginateTable(tableId, getItemsPerPage());
         });
     }
 
@@ -484,7 +497,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (visible) {
             const yr = visible.id.split('-')[1];
             ["artist-table", "track-table", "album-table"].forEach(base => {
-                paginateTable(`${base}-${yr}`, itemsPerPage);
+                paginateTable(`${base}-${yr}`, getItemsPerPage());
             });
         }
 
@@ -518,7 +531,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function switchMode(tableId, mode) {
     // Data-first rendering: simply re-render the table for the given id
-    paginateTable(tableId, itemsPerPage);
+    paginateTable(tableId, getItemsPerPage());
 }
 
 // Modal utility functions
@@ -727,7 +740,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (customTab) activateTab(customTab);
             // Re-render custom tables
             ['artist-table','track-table','album-table'].forEach(base => {
-                paginateTable(`${base}-custom`, itemsPerPage);
+                paginateTable(`${base}-custom`, getItemsPerPage());
             });
             // Update info banners
             updateCustomRangeInfo(startVal, endVal, true);
@@ -755,18 +768,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // — Initialize the input with saved or default value —
     const ippInput = document.getElementById("items-per-page-input");
-    ippInput.value = itemsPerPage;
+    ippInput.value = getItemsPerPage();
 
     document.getElementById("apply-settings").addEventListener("click", () => {
         const v = parseInt(ippInput.value, 10);
         if (!isNaN(v) && v > 0) {
-            itemsPerPage = v;
-            localStorage.setItem("itemsPerPage", v);
+            setItemsPerPage(v);
+            const pageSize = getItemsPerPage();
             // re‑paginate every table with the new page size
             document.querySelectorAll('.year-section').forEach(sec => {
                 const yr = sec.id.split('-')[1];
                 ['artist-table', 'track-table', 'album-table'].forEach(base =>
-                    paginateTable(`${base}-${yr}`, itemsPerPage)
+                    paginateTable(`${base}-${yr}`, pageSize)
                 );
             });
         } else {
@@ -864,8 +877,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Ensure tables in this section are initialized/rendered for current mode
         ['artist-table','track-table','album-table'].forEach(base => {
-            paginateTable(`${base}-${y}`, itemsPerPage);
-        });
+            paginateTable(`${base}-${y}`, getItemsPerPage());
+    });
 
         // restore any saved searches in this section
         section.querySelectorAll('.search-input').forEach(input => {
