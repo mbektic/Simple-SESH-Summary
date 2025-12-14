@@ -5,11 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] 2025-12-14
+### Added 
+- Added a new "Smart Playlist"
+- Made "On This Day" songs clickable, opening Spotify.
+- Made "Tracks" table songs clickable, opening Spotify.
+
+### Fixed
+- Search is now working again.
+- Fixed styling on for "On This Day"
+- Fixed "On this Day" starting at 1. on every page.
+- Fixed scrolling braking after changing table size in setting. 
+- Prevent background page from scrolling when modals are open, avoiding unintended page interactions.
+
 ## [1.18.2] 2025-12-11
 ### Changed
 - Using the data added in `1.18.0` changed On This Day to generate on the fly instead of being built in the HTML file.
     - This brought the file size down from ~5.4MB to ~4.9MB.
-- Increased compression level and switched to using deterministic JSON serialization.
+- Increased the compression level and switched to using deterministic JSON serialization.
   - Didn't decrease size much, but it's still better than the previous version.
 - Replaced object‑heavy JSON with columnar/array schema.
 

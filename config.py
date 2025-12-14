@@ -25,6 +25,12 @@ OUTPUT_FILE = "summary"
 # Larger files, but faster first paint when disabled.
 COMPRESS_TABLE_DATA = True
 
+# Smart Playlists configuration
+# When enabled, the generator will create several playlist recipes from your history
+SMART_PLAYLISTS_ENABLED = True
+
+# Maximum number of tracks per generated playlist
+SMART_PLAYLISTS_MAX_TRACKS = 50
 
 def validate_config():
     """
@@ -35,6 +41,7 @@ def validate_config():
         bool: True if validation succeeded, False if critical errors were found
     """
     global MIN_MILLISECONDS, INPUT_DIR, OUTPUT_FILE, MIN_YEAR, COMPRESS_TABLE_DATA
+    global SMART_PLAYLISTS_ENABLED, SMART_PLAYLISTS_MAX_TRACKS
 
     # Validate MIN_MILLISECONDS
     if not isinstance(MIN_MILLISECONDS, int) or MIN_MILLISECONDS < 0:
@@ -75,6 +82,20 @@ def validate_config():
     if not isinstance(COMPRESS_TABLE_DATA, bool):
         logging.warning(f"Invalid COMPRESS_TABLE_DATA value: {COMPRESS_TABLE_DATA}. Using True.")
         COMPRESS_TABLE_DATA = True
+
+    # Validate SMART_PLAYLISTS_ENABLED
+    if not isinstance(SMART_PLAYLISTS_ENABLED, bool):
+        logging.warning(f"Invalid SMART_PLAYLISTS_ENABLED value: {SMART_PLAYLISTS_ENABLED}. Using True.")
+        SMART_PLAYLISTS_ENABLED = True
+
+    # Validate SMART_PLAYLISTS_MAX_TRACKS
+    try:
+        SMART_PLAYLISTS_MAX_TRACKS = int(SMART_PLAYLISTS_MAX_TRACKS)
+        if SMART_PLAYLISTS_MAX_TRACKS <= 0:
+            raise ValueError("must be positive")
+    except Exception:
+        logging.warning("Invalid SMART_PLAYLISTS_MAX_TRACKS; defaulting to 50")
+        SMART_PLAYLISTS_MAX_TRACKS = 50
 
     # Check if the directory part of the output file path exists
     output_dir = os.path.dirname(OUTPUT_FILE)

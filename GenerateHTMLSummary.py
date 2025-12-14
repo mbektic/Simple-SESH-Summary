@@ -15,9 +15,10 @@ from html_generation import build_year_tabs, build_year_dropdown, build_all_sect
     generate_html_content, write_html_to_file, generate_personality_html, build_tables_data
 from statistics import calculate_all_stats
 from logging_config import configure_logging, log_exception, log_system_info
+from smart_playlists import generate_smart_playlists, write_playlists_to_file
 
 # The script version. You can check the changelog at the GitHub URL to see if there is a new version.
-VERSION = "1.18.2"
+VERSION = "1.9.0"
 GITHUB_URL = "https://github.com/mbektic/Simple-SESH-Sumary/blob/main/CHANGELOG.md"
 
 # Parse command line arguments
@@ -136,11 +137,51 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
             year_sections = build_year_sections(years)
             sections = all_section + year_sections
             stats_html = build_stats_html(stats_data, daily_counts, yearly)
-            table_data = build_tables_data(all_data, yearly, daily_entity)
+
+            # Build a URI map from raw entries to embed alongside names
+            uri_by_name: dict[str, str] = {}
+            try:
+                for e in entries:
+                    uri = e.get("spotify_track_uri")
+                    if not isinstance(uri, str) or not uri.startswith("spotify:track:"):
+                        continue
+                    track = e.get("master_metadata_track_name") or ""
+                    artist = e.get("master_metadata_album_artist_name") or ""
+                    if not track:
+                        continue
+                    # Exact track label
+                    if track not in uri_by_name:
+                        uri_by_name[track] = uri
+                    if artist:
+                        # Common display formats used in tables
+                        key_dash = f"{track} - {artist}"
+                        key_mdash = f"{track} — {artist}"
+                        if key_dash not in uri_by_name:
+                            uri_by_name[key_dash] = uri
+                        if key_mdash not in uri_by_name:
+                            uri_by_name[key_mdash] = uri
+            except Exception as _e:
+                # Non-fatal; proceed without additional URIs
+                pass
+
+            table_data = build_tables_data(all_data, yearly, daily_entity, uri_by_name)
         except Exception as e:
             logging.error(f"Error building HTML content: {e}")
             log_exception()
             raise
+
+        # Generate Smart Playlists (local JSON + embed in page)
+        playlists_data = None
+        try:
+            if getattr(config, 'SMART_PLAYLISTS_ENABLED', True):
+                update_progress("Generating smart playlists", 0.75)
+                playlists_data = generate_smart_playlists(
+                    entries,
+                    getattr(config, 'SMART_PLAYLISTS_MAX_TRACKS', 50),
+                    getattr(config, 'MIN_YEAR', None)
+                )
+        except Exception as e:
+            logging.error(f"Smart playlists generation failed: {e}")
 
         # Generate personality HTML
         personality_html = generate_personality_html(stats_data)
@@ -149,7 +190,7 @@ def count_plays_from_directory(config: Any, progress_callback=None) -> None:
         update_progress("Generating HTML", 0.8)
         try:
             html_content = generate_html_content(
-                tabs, sections, stats_html, GITHUB_URL, VERSION, personality_html, year_dropdown, table_data
+                tabs, sections, stats_html, GITHUB_URL, VERSION, personality_html, year_dropdown, table_data, None, playlists_data
             )
         except Exception as e:
             logging.error(f"Error generating HTML content: {e}")

@@ -5,6 +5,117 @@ let currentList = [];
 // Lazy-built cache: MM-DD -> Array<{track, date, count}>
 let __OTD_CACHE = null;
 
+// Build a Spotify link for a given track using search (works without URIs)
+function spotifySearchLink(track) {
+    try {
+        const q = String(track || '').trim();
+        if (!q) return 'https://open.spotify.com/search';
+        return 'https://open.spotify.com/search/' + encodeURIComponent(q);
+    } catch (_) {
+        return 'https://open.spotify.com/search';
+    }
+}
+
+// Prefer direct track URLs when we can infer a Spotify URI from Smart Playlists
+// Use window-scoped singletons to avoid "redeclaration" across concatenated scripts
+
+function getPlaylistsData() {
+    if (window.__PLAYLISTS_DATA_CACHE) return window.__PLAYLISTS_DATA_CACHE;
+    try {
+        const el = document.getElementById('smart-playlists');
+        if (!el) return null;
+        window.__PLAYLISTS_DATA_CACHE = JSON.parse(el.textContent);
+        return window.__PLAYLISTS_DATA_CACHE;
+    } catch (e) {
+        // ignore parse errors
+        return null;
+    }
+}
+
+function getTrackUriMap() {
+    if (window.__TRACK_URI_MAP) return window.__TRACK_URI_MAP;
+    window.__TRACK_URI_MAP = {};
+    const norm = (s) => String(s || '')
+        .toLowerCase()
+        .replace(/[\u2012\u2013\u2014\u2015]/g, '-')
+        .replace(/\s*[-–—]\s*/g, ' - ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const put = (k, uri) => { if (k && uri && !window.__TRACK_URI_MAP[k]) window.__TRACK_URI_MAP[k] = uri; };
+
+    // 1) Seed from table-data (preferred)
+    try {
+        const root = getTableData();
+        const namesArr = Array.isArray(root && root.names) ? root.names : [];
+        const urisArr = Array.isArray(root && root.uris) ? root.uris : [];
+        for (let i = 0; i < namesArr.length && i < urisArr.length; i++) {
+            const name = String(namesArr[i] || '').trim();
+            const uri = String(urisArr[i] || '');
+            if (!name || !uri || !uri.startsWith('spotify:track:')) continue;
+            put(norm(name), uri);
+            const parts = name.split(/\s*[\-\u2012\u2013\u2014\u2015]\s+/);
+            if (parts.length >= 2) put(norm(parts[0]), uri);
+        }
+    } catch (e) { /* ignore */ }
+
+    // 2) Merge Smart Playlists without overwriting
+    const data = getPlaylistsData();
+    try {
+        const pls = data && Array.isArray(data.playlists) ? data.playlists : [];
+        pls.forEach(pl => {
+            const items = Array.isArray(pl.items) ? pl.items : [];
+            items.forEach(it => {
+                const name = (it && it.track) ? String(it.track).trim() : '';
+                const artist = (it && it.artist) ? String(it.artist).trim() : '';
+                const uri = it && it.uri ? String(it.uri) : '';
+                if (!name || !uri || !uri.startsWith('spotify:track:')) return;
+                put(norm(name), uri);
+                if (artist) {
+                    put(norm(name + ' - ' + artist), uri);
+                    put(norm(name + ' — ' + artist), uri);
+                }
+            });
+        });
+    } catch (e) { /* ignore */ }
+    return window.__TRACK_URI_MAP;
+}
+
+function spotifyLinkForName(trackName) {
+    try {
+        const raw = String(trackName || '').trim();
+        if (!raw) return '';
+        const map = getTrackUriMap();
+        const norm = (s) => String(s || '')
+            .toLowerCase()
+            .replace(/[\u2012\u2013\u2014\u2015]/g, '-')
+            .replace(/\s*[-–—]\s*/g, ' - ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Try exact match on the full label (handles "Track - Artist")
+        let uri = map[norm(raw)];
+        if (!uri) {
+            // Try splitting into track and artist and look up aliases
+            const split = raw.split(/\s*[\-\u2012\u2013\u2014\u2015]\s+/);
+            if (split.length >= 2) {
+                const track = split[0];
+                const artist = split.slice(1).join(' - ');
+                uri = map[norm(track + ' - ' + artist)] || map[norm(track)];
+            } else {
+                uri = map[norm(raw)];
+            }
+        }
+        if (uri && uri.startsWith('spotify:track:')) {
+            const id = uri.split(':').pop();
+            return 'https://open.spotify.com/track/' + encodeURIComponent(id);
+        }
+        // No search fallback: only return a direct track URL if we have an ID
+        return '';
+    } catch (_) {
+        return '';
+    }
+}
+
 function buildOTDCache(force = false) {
     // Allow explicit rebuilds
     if (force) __OTD_CACHE = null;
@@ -57,14 +168,27 @@ function renderOTDPage() {
     const end = start + TRACKS_PER_PAGE;
     const slice = currentList.slice(start, end);
 
-    document.getElementById("otd-results").innerHTML = `
-    <ol class="otd-list">
-      ${slice.map(({track, date, count}) => `
+    const html = slice.map(({track, date, count}) => {
+        const link = (window.spotifyLinkForName || spotifyLinkForName)(track);
+        const label = track;
+        const dateStr = new Date(date + 'T12:00:00Z').toLocaleDateString();
+        if (link) {
+            return `
         <li>
-          <span class="otd-track">${track}</span>
-          <span class="otd-meta">${count}× on ${new Date(date + 'T12:00:00Z').toLocaleDateString()}</span>
-        </li>
-      `).join("")}
+          <a class="otd-track" href="${link}" target="_blank" rel="noopener noreferrer">${label}</a>
+          <span class="otd-meta">${count}× on ${dateStr}</span>
+        </li>`;
+        }
+        return `
+        <li>
+          <span class="otd-track">${label}</span>
+          <span class="otd-meta">${count}× on ${dateStr}</span>
+        </li>`;
+    }).join("");
+
+    document.getElementById("otd-results").innerHTML = `
+    <ol class="otd-list" start="${start + 1}">
+      ${html}
     </ol>
   `;
 

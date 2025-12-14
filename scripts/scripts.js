@@ -56,6 +56,131 @@ function formatMs(ms){
     return `${pad(h)}h ${pad(m)}m ${pad(s)}s`;
 }
 
+// Build a Spotify link for a given track using search (works without URIs)
+function spotifySearchLink(track) {
+    try {
+        const q = String(track || '').trim();
+        if (!q) return 'https://open.spotify.com/search';
+        return 'https://open.spotify.com/search/' + encodeURIComponent(q);
+    } catch (e) {
+        return 'https://open.spotify.com/search';
+    }
+}
+
+// Attempt to mirror Smart Playlists behavior: use a direct track URL when we
+// can infer a Spotify URI from the embedded Smart Playlists data; otherwise
+// fall back to a search URL. This improves the chance that playback starts
+// immediately on Spotify Web when the user clicks a track in our tables.
+var __PLAYLISTS_DATA_CACHE = null;
+var __TRACK_URI_MAP = null; // name(lowercased) -> spotify:track:<id>
+var __TRACK_URI_KEYS_BUILT = false; // ensure aliases built once
+
+function getPlaylistsData() {
+    if (__PLAYLISTS_DATA_CACHE) return __PLAYLISTS_DATA_CACHE;
+    try {
+        const el = document.getElementById('smart-playlists');
+        if (!el) return null;
+        __PLAYLISTS_DATA_CACHE = JSON.parse(el.textContent);
+        return __PLAYLISTS_DATA_CACHE;
+    } catch (e) {
+        console.warn('Failed to parse smart playlists data', e);
+        return null;
+    }
+}
+
+function getTrackUriMap() {
+    if (__TRACK_URI_MAP) return __TRACK_URI_MAP;
+    __TRACK_URI_MAP = {};
+    const norm = (s) => String(s || '')
+        .toLowerCase()
+        .replace(/[\u2012\u2013\u2014\u2015]/g, '-') // normalize dashes
+        .replace(/\s*[-–—]\s*/g, ' - ') // compact around dashes
+        .replace(/\s+/g, ' ') // collapse whitespace
+        .trim();
+    const put = (k, uri) => { if (k && uri && !__TRACK_URI_MAP[k]) __TRACK_URI_MAP[k] = uri; };
+
+    // 1) Seed from table-data (preferred)
+    try {
+        const root = getTableRoot();
+        const namesArr = Array.isArray(root.names) ? root.names : [];
+        const urisArr = Array.isArray(root.uris) ? root.uris : [];
+        for (let i = 0; i < namesArr.length && i < urisArr.length; i++) {
+            const name = String(namesArr[i] || '').trim();
+            const uri = String(urisArr[i] || '');
+            if (!name || !uri || !uri.startsWith('spotify:track:')) continue;
+            put(norm(name), uri);
+            // If name is in "Track - Artist" form, also allow matching just the track
+            const parts = name.split(/\s*[\-\u2012\u2013\u2014\u2015]\s+/);
+            if (parts.length >= 2) {
+                const trackOnly = parts[0];
+                put(norm(trackOnly), uri);
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
+
+    // 2) Merge Smart Playlists data without overwriting seeded entries
+    const plData = getPlaylistsData();
+    try {
+        const pls = plData && Array.isArray(plData.playlists) ? plData.playlists : [];
+        pls.forEach(pl => {
+            const items = Array.isArray(pl.items) ? pl.items : [];
+            items.forEach(it => {
+                const name = (it && it.track) ? String(it.track).trim() : '';
+                const artist = (it && it.artist) ? String(it.artist).trim() : '';
+                const uri = it && it.uri ? String(it.uri) : '';
+                if (!name || !uri || !uri.startsWith('spotify:track:')) return;
+                put(norm(name), uri);
+                if (artist) {
+                    put(norm(name + ' - ' + artist), uri);
+                    put(norm(name + ' — ' + artist), uri);
+                }
+            });
+        });
+    } catch (e) {
+        // ignore
+    }
+    return __TRACK_URI_MAP;
+}
+
+function spotifyLinkForName(trackName) {
+    try {
+        const raw = String(trackName || '').trim();
+        if (!raw) return '';
+        const map = getTrackUriMap();
+        const norm = (s) => String(s || '')
+            .toLowerCase()
+            .replace(/[\u2012\u2013\u2014\u2015]/g, '-')
+            .replace(/\s*[-–—]\s*/g, ' - ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        // Try direct lookup by full raw label (handles "Track - Artist")
+        let key = norm(raw);
+        let uri = map[key];
+        if (!uri) {
+            // Try splitting into track/artist if present
+            const split = raw.split(/\s*[\-\u2012\u2013\u2014\u2015]\s+/);
+            if (split.length >= 2) {
+                const track = split[0];
+                const artist = split.slice(1).join(' - ');
+                uri = map[norm(track + ' - ' + artist)] || map[norm(track)];
+            } else {
+                uri = map[norm(raw)];
+            }
+        }
+        if (uri && uri.startsWith('spotify:track:')) {
+            const id = uri.split(':').pop();
+            return 'https://open.spotify.com/track/' + encodeURIComponent(id);
+        }
+        // No fallback to search: only return a direct track link if we have an ID
+        return '';
+    } catch (e) {
+        return '';
+    }
+}
+
 window.onload = () => {
     const overlay = document.getElementById('loading-overlay');
 
@@ -184,11 +309,40 @@ function paginateTable(tableId, pageSize) {
                 const tdName = document.createElement('td');
                 const tdVal = document.createElement('td');
                 tdRank.textContent = String(start + idx + 1);
-                if (term) {
-                    const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-                    tdName.innerHTML = name.replace(re, '<span class="highlight">$1</span>');
+                // For Tracks tables, render the name as a Spotify link, preferring a direct track
+                // URL when we can infer the URI from Smart Playlists; otherwise fall back to search.
+                if (prefix === 'track-table') {
+                    const href = spotifyLinkForName(name);
+                    if (href) {
+                        const a = document.createElement('a');
+                        a.href = href;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer';
+                        a.className = 'otd-track'; // reuse green styling from On This Day
+                        if (term) {
+                            const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                            a.innerHTML = name.replace(re, '<span class="highlight">$1</span>');
+                        } else {
+                            a.textContent = name;
+                        }
+                        tdName.appendChild(a);
+                    } else {
+                        // No direct track link available; render plain text with optional highlight
+                        if (term) {
+                            const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                            tdName.innerHTML = name.replace(re, '<span class="highlight">$1</span>');
+                        } else {
+                            tdName.textContent = name;
+                        }
+                    }
                 } else {
-                    tdName.textContent = name;
+                    // Non-track tables: keep plain text with optional highlight
+                    if (term) {
+                        const re = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                        tdName.innerHTML = name.replace(re, '<span class="highlight">$1</span>');
+                    } else {
+                        tdName.textContent = name;
+                    }
                 }
                 tdVal.textContent = isPlaytime ? formatMs(pt) : String(pc);
                 tr.appendChild(tdRank);
@@ -235,8 +389,10 @@ function paginateTable(tableId, pageSize) {
     if (searchInput && !searchInput.__wired) {
         searchInput.__wired = true;
         searchInput.addEventListener('input', () => {
+            // Persist the term for this table family (artist-table / track-table / album-table)
             searchTerms[prefix] = searchInput.value;
-            renderPage(1);
+            // Re-run pagination so the filtered index is recalculated with the new term
+            paginateTable(tableId, pageSize);
         });
     }
 
@@ -395,7 +551,12 @@ function setupFocusTrap(modalElement) {
 
 function openModal(modal, opener) {
     modal.style.display = "flex";
-    modal.dataset.opener = opener.id || '';
+    // Prevent background page from scrolling while a modal is open
+    if (!document.body.classList.contains('modal-open')) {
+        document.body.classList.add('modal-open');
+    }
+    const openerId = (opener && opener.id) ? opener.id : '';
+    modal.dataset.opener = openerId;
 
     // Focus the first focusable element
     const firstFocusable = modal.querySelector('a[href], button, textarea, input, select, [tabindex]:not([tabindex="-1"])');
@@ -408,6 +569,13 @@ function closeModal(modal) {
     if (modal.style.display !== "flex") return;
 
     modal.style.display = "none";
+    // Re-enable background scrolling when all modals are closed
+    // If there are no other visible overlays, remove the lock
+    const anyOpen = Array.from(document.querySelectorAll('.modal-overlay'))
+        .some(m => m.style.display === 'flex' || m.style.display === 'block');
+    if (!anyOpen) {
+        document.body.classList.remove('modal-open');
+    }
 
     // Return focus to the opener element
     const openerId = modal.dataset.opener;
@@ -601,8 +769,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     paginateTable(`${base}-${yr}`, itemsPerPage)
                 );
             });
-            // close the modal
-            document.getElementById("settings-modal").style.display = "none";
         } else {
             alert("Please enter a positive integer for Items per page.");
         }

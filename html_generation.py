@@ -287,7 +287,7 @@ def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
     Returns:
         str: HTML for the "All" section as a string
     """
-    sections = '<div class="year-section" id="year-all" style="display: block;">'
+    sections = '<div class="year-section active" id="year-all">'
     sections += build_table("Artists",
                             all_data["artist_time"], all_data["artist_counts"],
                             "artist-table-all")
@@ -303,7 +303,8 @@ def build_all_section(all_data: Dict[str, DefaultDict[str, int]]) -> str:
 
 def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
                       yearly: DefaultDict[int, Dict[str, DefaultDict[str, int]]],
-                      daily_entity: Dict[str, Dict[str, Dict[str, List[int]]]] | None = None) -> Dict[str, Any]:
+                      daily_entity: Dict[str, Dict[str, Dict[str, List[int]]]] | None = None,
+                      uri_by_name: Dict[str, str] | None = None) -> Dict[str, Any]:
     """
     Build a compact data structure for all tables to be rendered client-side.
 
@@ -320,6 +321,8 @@ def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
     # Deduplicate names across all tables
     name_to_index: Dict[str, int] = {}
     names: List[str] = []
+    # URIs aligned 1:1 with names (only tracks will have values)
+    uris: List[str] = []
 
     def get_index(name: str) -> int:
         if name in name_to_index:
@@ -327,6 +330,8 @@ def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
         idx = len(names)
         name_to_index[name] = idx
         names.append(name)
+        # keep uris aligned with names
+        uris.append("")
         return idx
 
     def build_rows(name_to_ms: Dict[str, int], name_to_pc: Dict[str, int]) -> List[List[Any]]:
@@ -336,7 +341,16 @@ def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
         for nm in all_names:
             pt = int(name_to_ms.get(nm, 0))
             pc = int(name_to_pc.get(nm, 0))
-            rows_i.append([get_index(nm), pt, pc])
+            idx = get_index(nm)
+            # If we have a URI mapping for this display name, capture it (tracks only)
+            if uri_by_name:
+                try:
+                    uri = uri_by_name.get(nm)
+                    if isinstance(uri, str) and uri.startswith('spotify:track:') and not uris[idx]:
+                        uris[idx] = uri
+                except Exception:
+                    pass
+            rows_i.append([idx, pt, pc])
         return rows_i
 
     # All-section tables
@@ -350,7 +364,7 @@ def build_tables_data(all_data: Dict[str, DefaultDict[str, int]],
         tables[f"track-table-{yr}"] = build_rows(ydata["track_time"], ydata["track_counts"])
         tables[f"album-table-{yr}"] = build_rows(ydata["album_time"], ydata["album_counts"])
 
-    result: Dict[str, Any] = {"names": names, "tables": tables}
+    result: Dict[str, Any] = {"names": names, "tables": tables, "uris": uris}
 
     # Optional: include compact daily dataset for client-side custom ranges
     if daily_entity:
@@ -387,7 +401,7 @@ def build_year_sections(years: List[int]) -> str:
     """
     sections = ""
     for yr in years:
-        sections += f'<div class="year-section" id="year-{yr}" style="display: none;"></div>'
+        sections += f'<div class="year-section" id="year-{yr}"></div>'
     # Add a hidden section for custom date ranges
     sections += '<div class="year-section" id="year-custom" style="display: none;"></div>'
     return sections
@@ -454,10 +468,10 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], y
                 <li>Hover/Tap on a year to see the exact values</li>
               </ul>
               <div class="yb-chart" aria-label="Listening by Year">
-                <div id="year-chart-playcount" class="yb-series" style="display:none;">
+                <div id="year-chart-playcount" class="yb-series hidden">
                 """ + pc_rows_html + """
                 </div>
-                <div id="year-chart-playtime" class="yb-series" style="display:flex;">
+                <div id="year-chart-playtime" class="yb-series">
                 """ + pt_rows_html + """
                 </div>
               </div>
@@ -580,13 +594,13 @@ def build_stats_html(stats_data: Dict[str, Any], daily_counts: Dict[str, int], y
 
 
      <!-- hidden modal -->
-    <div id="every-year-modal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="every-year-title" aria-hidden="true">
+    <div id="every-year-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="every-year-title" aria-hidden="true">
       <div class="modal-content">
         <div class="modal-header">
             <h2 id="every-year-title">Artists played every year({stats_data['every_year_count']})</h2>
             <button id="close-every-year-modal" class="close-button" aria-label="Close artists list">&times;</button>
         </div>
-        <ul style="list-style:none; padding:0; margin-top:1em; max-height:60vh; overflow:auto;" role="list" aria-label="Artists played every year">
+        <ul class="list-unstyled mt-1em scroll-y-60vh" role="list" aria-label="Artists played every year">
           {"".join(f"<li>{a}</li>" for a in stats_data['every_year_list'])}
         </ul>
       </div>
@@ -673,7 +687,7 @@ def generate_personality_html(stats_data: Dict[str, Any]) -> str:
         """
 
     return f"""
-    <h2>Your Listening Personality Type: <span style="color: #1DB954;">{personality_type}</span></h2>
+    <h2>Your Listening Personality Type: <span class="accent">{personality_type}</span></h2>
     <div id="personality-type" class="stats-group">
         <p>{personality_desc}</p>
         <div class="personality-chart">
@@ -739,7 +753,8 @@ def _compact_table_data(obj: Any) -> Dict[str, Any]:
 def generate_html_content(tabs: str, sections: str, stats_html: str, github_url: str, version: str,
                           personality_html: str, year_dropdown: str = "",
                           table_data: Dict[str, Any] | None = None,
-                          compress: bool | None = None) -> str:
+                          compress: bool | None = None,
+                          playlists_data: Dict[str, Any] | None = None) -> str:
     """
     Generate the complete HTML content for the summary report.
 
@@ -755,6 +770,7 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
         str: Complete HTML content as a string
     """
     data_script = ""
+    playlists_script = ""
     try:
         if table_data is not None:
             # Decide compression
@@ -793,9 +809,78 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
     except Exception as e:
         logging.error(f"Failed to serialize table data: {e}")
 
+    # Serialize smart playlists (if any) for client-side UI (button + modal population)
+    try:
+        if playlists_data and isinstance(playlists_data, dict) and playlists_data.get("playlists"):
+            playlists_json = json.dumps(playlists_data, separators=(",", ":"))
+            playlists_script = (
+                "\n        <script id=\"smart-playlists\" type=\"application/json\">" + playlists_json + "</script>\n"
+                "        <div style=\"margin:10px 16px; text-align: center; border-bottom: 2px solid #fff;\">\n"
+                "          <button id=\"open-playlists-btn\" class=\"btn stats-button\" aria-label=\"Open Smart Playlists\">Smart Playlists</button>\n"
+                "        </div>\n"
+                "        <script>\n"
+                "          (function(){\n"
+                "            function getPlaylistsData(){\n"
+                "              try{ var el = document.getElementById('smart-playlists'); return el ? JSON.parse(el.textContent) : null; }catch(e){ console.error(e); return null; }\n"
+                "            }\n"
+                "            function spotifyLinkFor(item){\n"
+                "              var uri = item && item.uri || '';\n"
+                "              if(uri.startsWith('spotify:track:')){\n"
+                "                var id = uri.split(':').pop();\n"
+                "                return 'https://open.spotify.com/track/' + encodeURIComponent(id);\n"
+                "              }\n"
+                "              if(/^https?:\/\//i.test(uri)) return uri;\n"
+                "              var q = (item.track||'') + ' ' + (item.artist||'');\n"
+                "              return 'https://open.spotify.com/search/' + encodeURIComponent(q.trim());\n"
+                "            }\n"
+                "            function renderList(){\n"
+                "              var data = getPlaylistsData();\n"
+                "              var listEl = document.getElementById('playlists-list');\n"
+                "              var detail = document.getElementById('playlist-detail');\n"
+                "              if(!data || !data.playlists || !listEl || !detail){ return; }\n"
+                "              listEl.innerHTML='';\n"
+                "              data.playlists.forEach(function(pl, idx){\n"
+                "                var li = document.createElement('li');\n"
+                "                var btn = document.createElement('button');\n"
+                "                btn.className = 'btn stats-button';\n"
+                "                btn.style = 'width:90%; text-align:left; margin:6px 0;';\n"
+                "                var count = (pl.items||[]).length;\n"
+                "                btn.textContent = pl.name + (count? (' ('+count+')') : '');\n"
+                "                btn.addEventListener('click', function(){\n"
+                "                  var html = '';\n"
+                "                  html += '<h3 style=\"margin:0 0 8px 0;\">'+ (pl.name||'') +'</h3>';\n"
+                "                  if(pl.description){ html += '<p style=\"opacity:.9;\">'+ pl.description +'</p>'; }\n"
+                "                  if(!pl.items || pl.items.length===0){ html += '<p>No tracks in this playlist.</p>'; detail.innerHTML = html; return; }\n"
+                "                  html += '<ol style=\"padding-left:18px;\">';\n"
+                "                  pl.items.forEach(function(it){\n"
+                "                    var url = spotifyLinkFor(it);\n"
+                "                    var label = (it.track||'Unknown Track') + ' — ' + (it.artist||'Unknown Artist');\n"
+                "                    var sub = it.album ? ('<span style=\"opacity:.8\"> ('+ it.album +')</span>') : '';\n"
+                "                    html += '<li style=\"margin:6px 0;\"><a href=\"'+url+'\" target=\"_blank\" rel=\"noopener noreferrer\">'+ label +'</a>'+ sub +'</li>';\n"
+                "                  });\n"
+                "                  html += '</ol>';\n"
+                "                  detail.innerHTML = html;\n"
+                "                });\n"
+                "                li.appendChild(btn);\n"
+                "                listEl.appendChild(li);\n"
+                "              });\n"
+                "            }\n"
+                "            function openModalEl(){\n"
+                "              var el = document.getElementById('smart-playlists-modal');\n"
+                "              if(!el) return;\n"
+                "              if(typeof window.openModal === 'function'){ window.openModal(el); } else { el.style.display='block'; }\n"
+                "            }\n"
+                "            var openBtn = document.getElementById('open-playlists-btn');\n"
+                "            if(openBtn){ openBtn.addEventListener('click', function(){ renderList(); openModalEl(); }); }\n"
+                "          })();\n"
+                "        </script>\n"
+            )
+    except Exception as e:
+        logging.error(f"Failed to serialize playlists data: {e}")
+
     return f"""
     <!DOCTYPE html>
-    <html style='overflow: hidden;'>
+    <html>
     <head>
         <meta charset="UTF-8">
         <title>Spotify Summary</title>
@@ -804,18 +889,20 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
         {predecode_script()}
         {generate_js()}
     </head>
-    <body style='overflow: hidden;'>
+    <body>
         {print_file("html/title_bar.html")}
         <div id="year-tabs">{tabs}</div>
         {year_dropdown}
-        <div id="custom-range-info" class="custom-range-info" style="display:none" aria-live="polite"></div>
+        <div id="custom-range-info" class="custom-range-info hidden" aria-live="polite"></div>
         {data_script}
         {sections}
+        {playlists_script}
         {personality_html}
         {stats_html}
 
         {print_file("html/settings_modal.html")}
         {print_file("html/date_range_modal.html")}
+        {print_file("html/smart_playlists_modal.html")}
     </body>
     <footer>
       <a id="version-link" href="{github_url}">Version: {version}</a>

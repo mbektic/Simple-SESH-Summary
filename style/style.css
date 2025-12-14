@@ -13,6 +13,87 @@ body {
     margin: 0;
 }
 
+/* Utility classes */
+.no-scroll {
+    overflow: hidden;
+}
+
+.muted {
+    opacity: 0.8;
+}
+
+.opacity-90 {
+    opacity: 0.9;
+}
+
+.opacity-80 {
+    opacity: 0.8;
+}
+
+.w-100 {
+    width: 100%;
+}
+
+.text-left {
+    text-align: left;
+}
+
+.m-0 {
+    margin: 0;
+}
+
+.mt-6 {
+    margin-top: 6px;
+}
+
+.mb-6 {
+    margin-bottom: 6px;
+}
+
+.my-6 {
+    margin-top: 6px;
+    margin-bottom: 6px;
+}
+
+.pl-18 {
+    padding-left: 18px;
+}
+
+.divider-right {
+    border-right: 1px solid var(--border-color, #333);
+}
+
+.input-4em {
+    width: 4em;
+}
+
+.list-unstyled {
+    list-style: none;
+    padding: 0;
+}
+
+.scroll-y-60vh {
+    max-height: 60vh;
+    overflow: auto;
+}
+
+.mt-1em {
+    margin-top: 1em;
+}
+
+/* Year sections visibility */
+.year-section {
+    display: none;
+}
+
+.year-section.active {
+    display: block;
+}
+
+.accent {
+    color: #1DB954;
+}
+
 .custom-range-info {
     margin: 6px auto 10px;
     text-align: center;
@@ -132,6 +213,10 @@ a, a:visited {
     flex-direction: column; /* stack rows vertically */
     gap: 10px;
     width: 100%;
+}
+
+.yb-series.hidden {
+    display: none !important;
 }
 
 .yb-hrow {
@@ -462,6 +547,108 @@ a, a:visited {
     align-items: center;
 }
 
+/* Lock background scroll when any modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
+.modal { /* generic modal container for custom modals */
+    background: #2b2b2b;
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.modal-wide {
+    max-width: 960px;
+    width: 92vw;
+    max-height: 88vh;
+}
+
+.modal-flex-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-body-split {
+    display: flex;
+    gap: 16px;
+    overflow: hidden;
+}
+
+.modal-sidebar {
+    flex: 0 0 280px;
+    min-width: 240px;
+    max-height: calc(88vh - 120px);
+    overflow: auto;
+    padding-right: 8px;
+}
+
+.modal-content-pane {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: calc(88vh - 120px);
+    overflow: auto;
+    padding-left: 8px;
+}
+
+.modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-full-left {
+    width: 100%;
+    text-align: left;
+}
+
+.sp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.sp-detail h3.m-0 {
+    margin: 0;
+}
+
+.sp-detail ol {
+    padding-left: 18px;
+}
+
+.sp-item {
+    margin: 6px 0;
+}
+
+#playlist-detail {
+    max-width: 90%;
+    margin: auto;
+}
+
+#playlists-list {
+    text-align: center;
+}
+
+#smart-playlists-modal ul {
+    padding-bottom: 16px;
+}
+
+#smart-playlists-modal h2 {
+    margin: 16px;
+}
+
+#smart-playlists-modal .close-btn {
+    margin-right: 16px;
+    font-size: 2em
+}
+
+#open-playlists-btn {
+    font-size: 1.5em;
+    margin-bottom: 30px;
+}
+
 .modal-content {
     background: #2b2b2b;
     color: white;
@@ -489,6 +676,19 @@ a, a:visited {
     background-color: transparent;
     color: #ccc;
     border: none;
+}
+
+/* Alias for alternate close button class used in some partials */
+.close-btn {
+    cursor: pointer;
+    font-size: 1.5rem;
+    background: transparent;
+    color: #ccc;
+    border: none;
+}
+
+.close-btn:hover {
+    color: #fff;
 }
 
 .close-button:hover {
@@ -663,8 +863,13 @@ a, a:visited {
     color: #1DB954;
 }
 
+#otd-prev {
+    margin-right: 0.5em;
+}
+
 #stats ol {
     margin: 2em;
+    padding-left: 16px;
 }
 
 #personality-type,
@@ -732,6 +937,10 @@ a, a:visited {
 @media only screen and (max-width: 1024px) {
     h2 {
         padding: 0 5%;
+    }
+
+    #stats ol {
+        padding-left: 4em;
     }
 
     #year-tabs {
@@ -875,6 +1084,10 @@ a, a:visited {
         grid-template-columns: repeat(auto-fit, minmax(90%, 1fr));
     }
 
+    #open-playlists-btn {
+        font-size: 3em;
+    }
+
     #heatmap-holder,
     #otd-holder,
     #personality-type,
@@ -981,6 +1194,68 @@ a, a:visited {
         font-size: 2em;
     }
 
+    /* Smart Playlists modal: responsive layout on mobile */
+    #smart-playlists-modal .modal-wide {
+        width: 96vw;
+        max-height: 88vh;
+    }
+
+    #smart-playlists-modal .modal-body-split {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    #smart-playlists-modal .modal-sidebar,
+    #smart-playlists-modal .modal-content-pane {
+        max-height: none;
+        padding: 0;
+    }
+
+    #smart-playlists-modal .modal-sidebar {
+        flex: 1 0.8 auto;
+        min-width: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color, #333);
+        padding-bottom: 8px;
+    }
+
+    #smart-playlists-modal .modal-content-pane {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 5%;
+    }
+
+    #smart-playlists-modal .btn-full-left,
+    #smart-playlists-modal .sp-list .btn {
+        width: 100%;
+        text-align: left;
+        font-size: 2rem;
+        padding: 10px 12px;
+    }
+
+    #smart-playlists-modal #smart-playlists-title {
+        font-size: 3rem;
+    }
+
+    #smart-playlists-modal .sp-detail li,
+    #smart-playlists-modal .sp-item,
+    #smart-playlists-modal #playlist-detail li {
+        margin: 8px 0;
+        line-height: 1.35;
+        font-size: 2em;
+    }
+
+    #playlist-detail h3 {
+        font-size: 3em
+    }
+
+    #playlist-detail p {
+        font-size: 2em;
+    }
+
+    #smart-playlists-modal .close-btn {
+        font-size: 4em
+    }
 }
 
 /* Extra small phones */
