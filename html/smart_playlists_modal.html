@@ -1,0 +1,20 @@
+<div id="smart-playlists-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="smart-playlists-title">
+  <div class="modal modal-wide modal-flex-col">
+    <div class="modal-header">
+      <h2 id="smart-playlists-title" class="m-0">Smart Playlists</h2>
+      <div class="modal-actions">
+        <button class="close-btn" aria-label="Close" onclick="(window.closeModal?closeModal:this.closest('.modal-overlay').style.display='none')(document.getElementById('smart-playlists-modal'))">×</button>
+      </div>
+    </div>
+    <div class="modal-body modal-body-split">
+      <div class="modal-sidebar divider-right">
+        <ul id="playlists-list" class="sp-list">
+          <!-- Filled by JS -->
+        </ul>
+      </div>
+      <div class="modal-content-pane">
+        <div id="playlist-detail"></div>
+      </div>
+    </div>
+  </div>
+</div>
