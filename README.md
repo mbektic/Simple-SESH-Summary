@@ -79,6 +79,13 @@ You can also click on any track here to open it on Spotify.
 ![Image](https://github.com/user-attachments/assets/a18a3ea2-279a-494e-bcf5-97989c344841)
 
 ### Stats
+#### Per Artis Stats
+##### Total Per Year
+![Image](https://github.com/user-attachments/assets/767f796c-61c1-487c-955c-84e2e2454423)
+##### Over the years
+![Image](https://github.com/user-attachments/assets/9b9e8716-a416-4982-9d24-4e1e3cbb7127)
+##### Change over Years
+![Image](https://github.com/user-attachments/assets/6176b642-c3d0-4ad9-a6cc-aed4d9d24471)
 #### Overview & Time/Library 
 ![Image](https://github.com/user-attachments/assets/fcac2f11-4e1b-4e4d-be34-a0673d5e634c)
 #### Milestones/Popularity

@@ -364,6 +364,11 @@ function paginateTable(tableId, pageSize) {
                     }
                 }
                 tdVal.textContent = isPlaytime ? formatMs(pt) : String(pc);
+                tdVal.classList.add('growth-clickable');
+                tdVal.setAttribute('data-tippy-content', 'Click to see growth');
+                tdVal.addEventListener('click', () => {
+                    openGrowthModal(name, prefix);
+                });
                 tr.appendChild(tdRank);
                 tr.appendChild(tdName);
                 tr.appendChild(tdVal);
@@ -636,6 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const {modal: settingsModal} = setupModal("settings-modal", "settings-button", "close-settings");
     const {modal: everyYearModal} = setupModal("every-year-modal", "show-every-year-btn", "close-every-year-modal");
     const {modal: dateRangeModal} = setupModal("date-range-modal", null, "close-date-range");
+    setupModal("growth-modal", null, null);
 
     // Wire date range modal extra buttons
     const applyDateBtn = document.getElementById('apply-date-range');
@@ -744,7 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Ensure custom section exists and render
             ensureYearSection('custom');
             // Activate custom tab/section
-            const customTab = document.querySelector('.year-tab[data-year="custom"]');
+            const customTab = document.querySelector('#year-tabs .year-tab[data-year="custom"]');
             if (customTab) activateTab(customTab);
             // Re-render custom tables
             ['artist-table','track-table','album-table'].forEach(base => {
@@ -760,7 +766,7 @@ document.addEventListener("DOMContentLoaded", () => {
             closeModal(dateRangeModal);
             // Ensure dropdown mirrors the active tab if it still shows custom
             if (yearSelect && yearSelect.value === 'custom'){
-                const activeTab = document.querySelector('.year-tab.active');
+                const activeTab = document.querySelector('#year-tabs .year-tab.active');
                 if (activeTab) yearSelect.value = activeTab.dataset.year;
             }
         });
@@ -771,6 +777,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (e.key === "Escape") {
             closeModal(settingsModal);
             closeModal(everyYearModal);
+            closeModal(dateRangeModal);
+            closeModal(document.getElementById('smart-playlists-modal'));
+            closeModal(document.getElementById('growth-modal'));
         }
     });
 
@@ -796,7 +805,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // year-tab click handler
-    const yearTabs = document.querySelectorAll('.year-tab');
+    const mainYearTabs = document.querySelectorAll('#year-tabs .year-tab');
     const yearSelect = document.getElementById('year-select');
     // Track the last non-custom year so the dropdown never stays on "custom"
     let lastNonCustomYear = 'all';
@@ -835,7 +844,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Function to activate a tab
     function activateTab(tab) {
-        yearTabs.forEach(t => {
+        mainYearTabs.forEach(t => {
             t.classList.remove('active');
             t.setAttribute('aria-selected', 'false');
         });
@@ -912,7 +921,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Add click handler to each tab
-    yearTabs.forEach(tab => {
+    mainYearTabs.forEach(tab => {
         // Make tabs keyboard focusable
         tab.setAttribute('tabindex', '0');
         tab.setAttribute('role', 'tab');
@@ -948,7 +957,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tabsContainer.addEventListener('keydown', (e) => {
         if (e.target.classList.contains('year-tab')) {
             const currentTab = e.target;
-            const tabsArray = Array.from(yearTabs);
+            const tabsArray = Array.from(mainYearTabs);
             const currentIndex = tabsArray.indexOf(currentTab);
 
             // Right arrow or Down arrow - move to next tab
@@ -969,7 +978,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Wire up year dropdown (mobile)
     if (yearSelect) {
         // initialize value from active tab, and set lastNonCustomYear
-        const activeTab = document.querySelector('.year-tab.active');
+        const activeTab = document.querySelector('#year-tabs .year-tab.active');
         if (activeTab) {
             const initY = activeTab.dataset.year;
             if (initY !== 'custom') {
@@ -998,10 +1007,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 const exists = yearSelect.querySelector('option[value="custom-range"]');
                 yearSelect.value = exists ? 'custom-range' : lastNonCustomYear;
             } else if (val === 'custom-range') {
-                const targetTab = document.querySelector(`.year-tab[data-year="custom"]`);
+                const targetTab = document.querySelector(`#year-tabs .year-tab[data-year="custom"]`);
                 if (targetTab) activateTab(targetTab);
             } else {
-                const targetTab = document.querySelector(`.year-tab[data-year="${val}"]`);
+                const targetTab = document.querySelector(`#year-tabs .year-tab[data-year="${val}"]`);
                 if (targetTab) activateTab(targetTab);
                 // hide custom info when switching away via dropdown
                 updateCustomRangeInfo(null, null, false);
@@ -1034,6 +1043,14 @@ document.addEventListener("DOMContentLoaded", () => {
         arrow: true,
         theme: 'spotify',
         maxWidth: '50em'
+    });
+
+    // Initialize tooltips for growth-clickable cells
+    tippy('.growth-clickable', {
+        theme: 'spotify',
+        placement: 'top',
+        arrow: true,
+        animation: 'shift-toward'
     });
 
     // ---------- Smart Playlists UI + Seasonal Echoes (moved from inline) ----------
@@ -1166,3 +1183,256 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     })();
 });
+
+// Growth Modal Logic
+function openGrowthModal(name, prefix) {
+    const modal = document.getElementById('growth-modal');
+    const title = document.getElementById('growth-title');
+    const content = document.getElementById('growth-detail-content');
+    const tabTotal = document.getElementById('tab-total-per-year');
+    const tabOverYears = document.getElementById('tab-over-the-years');
+    const tabGrowth = document.getElementById('tab-growth-over-years');
+
+    if (!modal || !title || !content) return;
+
+    title.textContent = `${name} - Stats`;
+    content.innerHTML = '<p>Loading...</p>';
+    openModal(modal);
+
+    const isPlaytime = document.getElementById('global-mode-toggle')?.checked;
+    const root = getTableRoot();
+    const namesArr = root.names;
+    const yearsData = []; // { year, pt, pc }
+
+    // prefix is like 'artist-table', 'track-table', 'album-table'
+    // we need to look through all tables with this prefix in root.tables
+    const prefixBase = prefix.replace(/-table$/, '');
+    for (const tableId in root.tables) {
+        const match = tableId.match(new RegExp(`^${prefixBase}-table-(\\d{4})$`));
+        if (match) {
+            const year = match[1];
+            const rows = root.tables[tableId];
+            const row = rows.find(r => {
+                const n = r[0];
+                const nameStr = (namesArr && typeof n === 'number') ? (namesArr[n] || '') : (n || '');
+                return nameStr === name;
+            });
+            if (row) {
+                yearsData.push({ year: parseInt(year), pt: row[1] || 0, pc: row[2] || 0 });
+            } else {
+                yearsData.push({ year: parseInt(year), pt: 0, pc: 0 });
+            }
+        }
+    }
+
+    yearsData.sort((a, b) => a.year - b.year);
+
+    function renderTotalPerYear() {
+        if (tabTotal) tabTotal.classList.add('active');
+        if (tabOverYears) tabOverYears.classList.remove('active');
+        if (tabGrowth) tabGrowth.classList.remove('active');
+
+        const maxVal = Math.max(...yearsData.map(d => isPlaytime ? d.pt : d.pc), 1);
+        
+        let html = '<div class="growth-chart-container">';
+        html += `<div class="growth-chart-legend">
+                    <div class="growth-legend-item">
+                        <div class="growth-legend-color" style="background-color: #1DB954;"></div>
+                        <span>${isPlaytime ? 'Playtime' : 'Plays'}</span>
+                    </div>
+                 </div>`;
+
+        yearsData.forEach(d => {
+            const val = isPlaytime ? d.pt : d.pc;
+            const perc = (val / maxVal) * 100;
+            const label = isPlaytime ? formatMs(val) : val;
+            html += `
+                <div class="growth-bar-group">
+                    <div class="growth-bar-label">${d.year}</div>
+                    <div class="growth-bar-wrapper">
+                        <div class="growth-bar" style="width: ${perc}%" data-tippy-content="${d.year}: ${label}"></div>
+                        <div class="growth-bar-value">${label}</div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        content.innerHTML = html;
+
+        // Initialize tooltips for bars
+        tippy('#growth-modal .growth-bar', {
+            theme: 'spotify',
+            placement: 'right',
+            appendTo: modal,
+            animation: 'shift-toward',
+            arrow: true
+        });
+    }
+
+    function renderOverTheYears() {
+        if (tabTotal) tabTotal.classList.remove('active');
+        if (tabOverYears) tabOverYears.classList.add('active');
+        if (tabGrowth) tabGrowth.classList.remove('active');
+
+        let cumulative = 0;
+        const cumData = yearsData.map(d => {
+            cumulative += isPlaytime ? d.pt : d.pc;
+            return { year: d.year, val: cumulative };
+        });
+
+        const maxVal = Math.max(...cumData.map(d => d.val), 1);
+        const count = cumData.length;
+        
+        let html = '<div class="growth-chart-container">';
+        html += `<div class="growth-chart-legend">
+                    <div class="growth-legend-item">
+                        <div class="growth-legend-color" style="background-color: #1DB954;"></div>
+                        <span>Cumulative ${isPlaytime ? 'Playtime' : 'Plays'}</span>
+                    </div>
+                 </div>`;
+        html += '<div class="growth-line-chart">';
+        
+        // Draw Y axis labels
+        const steps = 4;
+        for (let i = 0; i <= steps; i++) {
+            const val = (maxVal * i / steps);
+            const label = isPlaytime ? (val >= 3600000 ? Math.floor(val/3600000)+'h' : Math.floor(val/60000)+'m') : Math.floor(val);
+            const bottom = (i / steps) * 100;
+            html += `<div class="growth-axis-label-y" style="bottom: ${bottom}%">${label}</div>`;
+        }
+
+        cumData.forEach((d, i) => {
+            const xPerc = (i / Math.max(1, count - 1)) * 100;
+            const yPerc = (d.val / maxVal) * 100;
+            
+            // Point
+            html += `<div class="growth-line-point" style="left: ${xPerc}%; bottom: ${yPerc}%;" title="${d.year}: ${isPlaytime ? formatMs(d.val) : d.val}"></div>`;
+            
+            // X Axis label
+            html += `<div class="growth-axis-label-x" style="left: ${xPerc}%;">${d.year}</div>`;
+
+            // Line segment to next point
+            if (i < count - 1) {
+                const nextD = cumData[i+1];
+                const nextXPerc = ((i + 1) / Math.max(1, count - 1)) * 100;
+                const nextYPerc = (nextD.val / maxVal) * 100;
+                
+                // Use a simple DIV as a line. We need to calculate width and rotation.
+                // Since this is a fixed size container (approx), we can use some math.
+                // However, calculating absolute pixels in a responsive-ish container is tricky.
+                // Let's use a simpler approach: SVG would be better, but let's try CSS line.
+                // For CSS line, we'd need to know the container's width/height in pixels.
+                // Let's assume a default width of 400px if we can't get it, or just use SVG.
+                // SVG is much cleaner for lines.
+            }
+        });
+
+        // Re-render with SVG for the line
+        let svgLines = '';
+        const chartWidth = 400; // placeholder, we'll use viewBox
+        const chartHeight = 200;
+        
+        let pointsPath = "";
+        cumData.forEach((d, i) => {
+            const x = (i / Math.max(1, count - 1)) * chartWidth;
+            const y = chartHeight - (d.val / maxVal) * chartHeight;
+            pointsPath += (i === 0 ? "M" : " L") + `${x},${y}`;
+        });
+
+        html = '<div class="growth-chart-container">';
+        html += `<div class="growth-chart-legend">
+                    <div class="growth-legend-item">
+                        <div class="growth-legend-color" style="background-color: #1DB954;"></div>
+                        <span>Cumulative ${isPlaytime ? 'Playtime' : 'Plays'}</span>
+                    </div>
+                 </div>`;
+        html += `<div style="position: relative; margin: 20px 40px 40px 40px;">
+                    <svg viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="none" style="width: 100%; height: 200px; display: block; overflow: visible;">
+                        <line x1="0" y1="0" x2="0" y2="${chartHeight}" stroke="#444" stroke-width="2" />
+                        <line x1="0" y1="${chartHeight}" x2="${chartWidth}" y2="${chartHeight}" stroke="#444" stroke-width="2" />
+                        <path d="${pointsPath}" fill="none" stroke="#1DB954" stroke-width="3" stroke-linejoin="round" />
+                    </svg>`;
+        
+        // Add labels and points as absolute HTML for easy tooltips/styling
+        cumData.forEach((d, i) => {
+            const xPerc = (i / Math.max(1, count - 1)) * 100;
+            const yPerc = (d.val / maxVal) * 100;
+            html += `<div class="growth-line-point" style="left: ${xPerc}%; bottom: ${yPerc}%;" data-tippy-content="${d.year}: ${isPlaytime ? formatMs(d.val) : d.val}"></div>`;
+            html += `<div class="growth-axis-label-x" style="left: ${xPerc}%;">${d.year}</div>`;
+        });
+        for (let i = 0; i <= steps; i++) {
+            const val = (maxVal * i / steps);
+            const label = isPlaytime ? (val >= 3600000 ? Math.floor(val/3600000)+'h' : Math.floor(val/60000)+'m') : Math.floor(val);
+            const bottom = (i / steps) * 100;
+            html += `<div class="growth-axis-label-y" style="bottom: ${bottom}%">${label}</div>`;
+        }
+        
+        html += '</div></div>';
+        content.innerHTML = html;
+        
+        // Initialize tooltips for points
+        tippy('#growth-modal .growth-line-point', {
+            theme: 'spotify',
+            placement: 'top',
+            appendTo: modal,
+            animation: 'shift-toward',
+            arrow: true
+        });
+    }
+
+    function renderGrowth() {
+        if (tabTotal) tabTotal.classList.remove('active');
+        if (tabOverYears) tabOverYears.classList.remove('active');
+        if (tabGrowth) tabGrowth.classList.add('active');
+
+        let html = '<table>';
+        html += '<thead><tr><th style="text-align:center;">Year</th><th style="text-align:center;">Change (Time)</th><th style="text-align:center;">Change (Plays)</th></tr></thead>';
+        html += '<tbody>';
+
+        for (let i = 0; i < yearsData.length; i++) {
+            const curr = yearsData[i];
+            const prev = i > 0 ? yearsData[i-1] : null;
+
+            let ptChange = '-';
+            let pcChange = '-';
+
+            if (prev) {
+                const ptDiff = curr.pt - prev.pt;
+                const pcDiff = curr.pc - prev.pc;
+
+                const ptClass = ptDiff >= 0 ? 'growth-positive' : 'growth-negative';
+                const pcClass = pcDiff >= 0 ? 'growth-positive' : 'growth-negative';
+
+                const ptSign = ptDiff >= 0 ? '+' : '';
+                const pcSign = pcDiff >= 0 ? '+' : '';
+
+                ptChange = `<span class="${ptClass}">${ptSign}${formatMs(ptDiff).replace(/^-/,'')}</span>`;
+                pcChange = `<span class="${pcClass}">${pcSign}${pcDiff}</span>`;
+
+                if (prev.pt > 0) {
+                    const ptPerc = ((ptDiff / prev.pt) * 100).toFixed(1);
+                    ptChange += ` <small class="growth-percentage">(${ptSign}${ptPerc}%)</small>`;
+                }
+                if (prev.pc > 0) {
+                    const pcPerc = ((pcDiff / prev.pc) * 100).toFixed(1);
+                    pcChange += ` <small class="growth-percentage">(${pcSign}${pcPerc}%)</small>`;
+                }
+            }
+
+            html += `<tr>
+                <td>${curr.year}</td>
+                <td style="text-align:center;">${ptChange}</td>
+                <td style="text-align:center;">${pcChange}</td>
+            </tr>`;
+        }
+
+        html += '</tbody></table>';
+        content.innerHTML = html;
+    }
+
+    if (tabTotal) tabTotal.onclick = renderTotalPerYear;
+    if (tabOverYears) tabOverYears.onclick = renderOverTheYears;
+    if (tabGrowth) tabGrowth.onclick = renderGrowth;
+
+    renderTotalPerYear();
+}

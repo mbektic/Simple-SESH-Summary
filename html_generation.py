@@ -847,6 +847,7 @@ def generate_html_content(tabs: str, sections: str, stats_html: str, github_url:
         {print_file("html/settings_modal.html")}
         {print_file("html/date_range_modal.html")}
         {print_file("html/smart_playlists_modal.html")}
+        {print_file("html/growth_modal.html")}
     </body>
     <footer>
       <a id="version-link" href="{github_url}">Version: {version}</a>

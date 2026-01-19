@@ -1,0 +1,20 @@
+<div id="growth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="growth-title" style="display:none;">
+    <div class="modal modal-wide modal-flex-col">
+        <div class="modal-header">
+            <h2 id="growth-title" class="m-0">Entity Growth</h2>
+            <div class="modal-actions">
+                <button class="close-btn" aria-label="Close" onclick="closeModal(document.getElementById('growth-modal'))">×</button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="tabs-container">
+                <button class="year-tab active" id="tab-total-per-year">Total per Year</button>
+                <button class="year-tab" id="tab-over-the-years">Over the Years</button>
+                <button class="year-tab" id="tab-growth-over-years">Change over Years</button>
+            </div>
+            <div id="growth-detail-content" class="growth-content">
+                <!-- Content filled by JS -->
+            </div>
+        </div>
+    </div>
+</div>

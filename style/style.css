@@ -930,6 +930,166 @@ body.modal-open {
     position: absolute;
 }
 
+/* Growth Modal styles */
+#growth-modal h2 {
+    padding: 1em .5em;
+}
+
+#growth-modal .tabs-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    justify-content: center;
+}
+
+#growth-modal .growth-content {
+    min-height: 200px;
+}
+
+#growth-modal table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    text-align: center;
+}
+
+#growth-modal th {
+    border-bottom: 1px solid #444;
+}
+
+#growth-modal td {
+    padding: 8px 0;
+    border-bottom: 1px solid #333;
+}
+
+/* Growth Charts */
+.growth-chart-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px;
+}
+
+.growth-bar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.growth-bar-label {
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.growth-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 24px;
+}
+
+.growth-bar {
+    height: 100%;
+    background-color: #1DB954;
+    border-radius: 4px;
+    min-width: 2px;
+    transition: width 0.3s ease;
+}
+
+.growth-bar-value {
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.growth-line-chart {
+    position: relative;
+    height: 200px;
+    border-left: 2px solid #444;
+    border-bottom: 2px solid #444;
+    margin: 20px 40px 40px 40px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 10px;
+}
+
+.growth-line-point {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #1DB954;
+    border-radius: 50%;
+    transform: translate(-50%, 50%);
+    z-index: 2;
+}
+
+.growth-line-segment {
+    position: absolute;
+    height: 2px;
+    background-color: #1DB954;
+    transform-origin: left center;
+    z-index: 1;
+}
+
+.growth-axis-label-x {
+    position: absolute;
+    bottom: -25px;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+}
+
+.growth-axis-label-y {
+    position: absolute;
+    left: -40px;
+    transform: translateY(50%);
+    font-size: 0.75rem;
+    width: 35px;
+    text-align: right;
+}
+
+.growth-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+}
+
+.growth-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.growth-legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.growth-positive {
+    color: #1DB954;
+}
+
+.growth-negative {
+    color: #e91e63;
+}
+
+.growth-percentage {
+    opacity: 0.7;
+}
+
+.growth-clickable {
+    cursor: pointer;
+    color: #1DB954;
+}
+
+#growth-modal .modal {
+  padding-bottom: 2em;
+}
+
 /****************************
 * MOBILE STYLE
 *****************************/
@@ -1255,6 +1415,29 @@ body.modal-open {
 
     #smart-playlists-modal .close-btn {
         font-size: 4em
+    }
+
+    #growth-modal .growth-axis-label-y,
+    #growth-modal .growth-axis-label-x,
+    #growth-modal span {
+        font-size: 1.5em;
+    }
+
+    #growth-modal td span {
+        font-size: 1em;
+    }
+
+    .growth-bar-label,
+    .growth-bar-value {
+        font-size: 2em;
+    }
+
+    #growth-modal .close-btn {
+        font-size: 4em;
+    }
+
+    .growth-clickable {
+        color: #1DB954;
     }
 }
 
