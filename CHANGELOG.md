@@ -430,17 +430,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-04-17
 ### Added
 - Initial Release
-## [1.19.4] 2025-12-14
-### Changed
-- Moved all inline Seasonal Echoes and Smart Playlists UI logic out of `html_generation.py` into the consolidated `scripts/scripts.js` for cleaner structure and easier maintenance. The page still supports both compressed and plain table JSON.
-
-### Added
-- Two brand‑new Smart Playlists replacing the previous “Rising Obsessions” concept:
-  - City Skyline Shuffle — Commute‑hour staples (7–9am, 4–6pm) that recur across different days; mid‑length focus; capped at 3 per artist for variety.
-  - Late‑Bloomers — Slow‑burn risers across calendar quarters; increases over time without depending on the very latest month; capped at 3 per artist.
-
-### Removed
-- “Rising Obsessions: On the rise – you’ve been spinning these more this month.”
-
-### Notes
-- Seasonal Echoes remains computed at runtime in the browser each time you open the page and the playlists remain sorted alphabetically. The global filter that removes fully‑unknown items stays in effect.
