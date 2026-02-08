@@ -306,6 +306,9 @@ function paginateTable(tableId, pageSize) {
         const end = page * pageSize;
         const frag = document.createDocumentFragment();
 
+        const sortedRank = new Map();
+        sortedIdx.forEach((ri, rank) => sortedRank.set(ri, rank + 1));
+
         const sliceIdx = filteredIdx.slice(start, end);
         if (sliceIdx.length === 0) {
             const tr = document.createElement('tr');
@@ -327,7 +330,7 @@ function paginateTable(tableId, pageSize) {
                 const tdRank = document.createElement('td');
                 const tdName = document.createElement('td');
                 const tdVal = document.createElement('td');
-                tdRank.textContent = String(start + idx + 1);
+                tdRank.textContent = String(sortedRank.get(ri));
                 // For Tracks tables, render the name as a Spotify link, preferring a direct track
                 // URL when we can infer the URI from Smart Playlists; otherwise fall back to search.
                 if (prefix === 'track-table') {
